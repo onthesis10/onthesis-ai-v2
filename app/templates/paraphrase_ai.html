@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Paraphrase Studio - OnThesis{% endblock %}
+
+{% block page_styles %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<style>
+    /* Layout khusus halaman Studio (Full Height) */
+    .studio-wrapper {
+        height: calc(100vh - 6rem); /* Full viewport minus navbar */
+        min-height: 600px;
+    }
+
+    /* Editor Card (Turunan dari Bento Card Dashboard) */
+    .editor-card {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 24px;
+        box-shadow: var(--shadow-card);
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Fokus State (Glow Effect) */
+    .editor-card:focus-within {
+        border-color: var(--primary);
+        box-shadow: var(--shadow-glow);
+    }
+
+    /* Textarea tanpa border bawaan */
+    .studio-textarea {
+        background: transparent;
+        border: none;
+        width: 100%;
+        height: 100%;
+        resize: none;
+        outline: none;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: var(--text-primary);
+        padding: 0;
+    }
+    .studio-textarea::placeholder {
+        color: var(--text-secondary);
+        opacity: 0.5;
+        font-weight: 400;
+    }
+
+    /* Scrollbar Halus */
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { 
+        background-color: var(--border-light); 
+        border-radius: 99px; 
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { 
+        background-color: var(--text-secondary); 
+    }
+
+    /* Dropdown Animation */
+    .dropdown-enter {
+        animation: dropIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes dropIn {
+        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="paraphraseApp()" 
+     class="studio-wrapper flex flex-col gap-6"
+     data-user-pro="{{ 'true' if current_user.is_pro else 'false' }}">
+
+    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+        
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black text-[var(--text-primary)] tracking-tight">Paraphrase</h1>
+                <p class="text-sm text-[var(--text-secondary)] font-medium">Ubah gaya bahasa skripsimu.</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 bg-[var(--bg-card)] p-1.5 rounded-2xl border border-[var(--border-light)] shadow-sm">
+            
+            <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                <button @click="open = !open" 
+                        class="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-[var(--bg-page)] text-[var(--text-primary)] transition-colors">
+                    <span class="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Mode:</span>
+                    <div class="flex items-center gap-1.5">
+                        <i :data-lucide="getStyleIcon(selectedStyle)" class="w-4 h-4 text-[var(--primary)]"></i>
+                        <span class="text-sm font-bold" x-text="getStyleLabel(selectedStyle)"></span>
+                    </div>
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-[var(--text-secondary)] ml-1"></i>
+                </button>
+
+                <div x-show="open" x-cloak class="dropdown-enter absolute top-full right-0 mt-2 w-48 bg-[var(--bg-card)] border border-[var(--border-light)] rounded-xl shadow-xl overflow-hidden z-50 p-1">
+                    <template x-for="style in styles" :key="style.id">
+                        <button @click="selectedStyle = style.id; open = false; $nextTick(() => lucide.createIcons())" 
+                                class="w-full px-3 py-2 rounded-lg flex items-center gap-3 text-left transition-colors"
+                                :class="selectedStyle === style.id ? 'bg-[var(--bg-page)] text-[var(--primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-page)] hover:text-[var(--text-primary)]'">
+                            <i :data-lucide="style.icon" class="w-4 h-4"></i>
+                            <span class="text-xs font-bold" x-text="style.label"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <div class="w-px h-6 bg-[var(--border-light)]"></div>
+
+            <button @click="processParaphrase()" 
+                    :disabled="isLoading || !inputText || (wordCount > maxWords && !isPro)" 
+                    class="btn-vibrant h-10 px-6 rounded-xl flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i x-show="!isLoading" data-lucide="sparkles" class="w-4 h-4"></i>
+                <i x-show="isLoading" data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                <span x-text="isLoading ? 'Menulis...' : 'Paraphrase'"></span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
+        
+        <div class="flex flex-col gap-2 h-full">
+            <div class="flex justify-between items-end px-2">
+                <span class="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest">Teks Asli</span>
+                <div class="flex items-center gap-3">
+                    <span class="text-[10px] font-bold" :class="(wordCount > maxWords && !isPro) ? 'text-red-500' : 'text-[var(--text-secondary)]'">
+                        <span x-text="wordCount">0</span> / <span x-text="isPro ? '∞' : maxWords"></span> Kata
+                    </span>
+                    <button x-show="inputText" @click="inputText = ''" class="text-[var(--text-secondary)] hover:text-red-500 transition-colors" title="Hapus Semua">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="editor-card flex-1 p-6">
+                <textarea x-model="inputText" 
+                          class="studio-textarea custom-scroll" 
+                          placeholder="Tempel kalimat atau paragraf di sini..."
+                          spellcheck="false"></textarea>
+                
+                <div class="absolute bottom-4 right-4 opacity-5 pointer-events-none">
+                    <i data-lucide="edit-3" class="w-20 h-20 text-[var(--text-primary)]"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-2 h-full">
+            <div class="flex justify-between items-end px-2">
+                <span class="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest">Hasil</span>
+                
+                <div class="flex gap-1" x-show="outputText" x-transition>
+                    <button @click="copyResult()" class="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-page)] transition-colors" title="Salin">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                    <button @click="exportDoc()" class="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-page)] transition-colors" title="Download Docx">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="editor-card flex-1 p-6 transition-colors duration-300" 
+                 :class="outputText ? 'bg-[var(--bg-card)]' : 'bg-[var(--bg-card)]/60'">
+                
+                <div x-show="!outputText && !isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-[var(--text-secondary)] opacity-40 select-none pointer-events-none">
+                    <div class="w-16 h-16 rounded-full border-2 border-dashed border-current flex items-center justify-center mb-3">
+                        <i data-lucide="wand-2" class="w-8 h-8"></i>
+                    </div>
+                    <p class="text-xs font-bold uppercase tracking-wider">Menunggu Input</p>
+                </div>
+
+                <div x-show="isLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center backdrop-blur-sm bg-[var(--bg-card)]/50">
+                    <div class="relative w-16 h-16">
+                        <div class="absolute inset-0 border-4 border-[var(--border-light)] rounded-full"></div>
+                        <div class="absolute inset-0 border-4 border-[var(--primary)] rounded-full border-t-transparent animate-spin"></div>
+                    </div>
+                    <p class="mt-4 text-xs font-bold text-[var(--primary)] animate-pulse tracking-widest uppercase">Sedang Menulis...</p>
+                </div>
+
+                <div x-show="outputText" class="h-full overflow-y-auto custom-scroll pr-2">
+                    <div id="output-content" 
+                         class="prose prose-lg max-w-none leading-loose 
+                                text-[var(--text-primary)]
+                                prose-headings:text-[var(--text-primary)] 
+                                prose-strong:text-[var(--primary)] 
+                                prose-p:text-[var(--text-primary)]" 
+                         x-html="renderMarkdown(outputText)"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    function paraphraseApp() {
+        return {
+            isPro: false,
+            selectedStyle: 'academic',
+            inputText: '',
+            outputText: '',
+            isLoading: false,
+            maxWords: 500,
+            
+            styles: [
+                { id: 'academic', label: 'Akademis', icon: 'graduation-cap' },
+                { id: 'formal', label: 'Formal', icon: 'briefcase' },
+                { id: 'simple', label: 'Sederhana', icon: 'coffee' },
+                { id: 'creative', label: 'Kreatif', icon: 'palette' },
+                { id: 'expand', label: 'Perpanjang', icon: 'maximize-2' },
+                { id: 'shorten', label: 'Perpendek', icon: 'minimize-2' }
+            ],
+
+            converter: new showdown.Converter({ simpleLineBreaks: true }),
+
+            init() {
+                // Safe check dataset
+                this.isPro = (this.$el.dataset.userPro === 'true');
+                this.$nextTick(() => lucide.createIcons());
+                this.$watch('selectedStyle', () => this.$nextTick(() => lucide.createIcons()));
+            },
+
+            get wordCount() {
+                if (!this.inputText) return 0;
+                return this.inputText.trim().split(/\s+/).filter(w => w.length > 0).length;
+            },
+
+            getStyleLabel(id) { return this.styles.find(s => s.id === id)?.label || 'Pilih'; },
+            getStyleIcon(id) { return this.styles.find(s => s.id === id)?.icon || 'circle'; },
+
+            async processParaphrase() {
+                if (!this.inputText.trim()) return;
+                
+                if (!this.isPro && this.wordCount > this.maxWords) {
+                    alert(`Mode gratis terbatas ${this.maxWords} kata. Silakan upgrade ke Pro.`);
+                    return;
+                }
+                
+                this.isLoading = true;
+                this.outputText = '';
+
+                try {
+                    // Pastikan endpoint sesuai dengan log server kamu (/paraphrase atau /api/paraphrase)
+                    // Berdasarkan log error kamu: "POST /paraphrase HTTP/1.1" 200
+                    const response = await fetch('/paraphrase', {  
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: this.inputText,
+                            style: this.selectedStyle
+                        })
+                    });
+
+                    if (!response.ok) throw new Error("Gagal memproses permintaan.");
+
+                    // --- PERBAIKAN LOGIC JSON vs TEXT ---
+                    const rawText = await response.text();
+                    
+                    try {
+                        // Coba parse sebagai JSON dulu
+                        const data = JSON.parse(rawText);
+                        if (data.result) {
+                            this.outputText = data.result;
+                        } else {
+                            // Kalau JSON valid tapi ga ada key 'result', anggap rawText adalah hasilnya
+                            this.outputText = rawText; 
+                        }
+                    } catch (e) {
+                        // Kalau error parse JSON (seperti kasus "Demikianla..."), 
+                        // berarti backend langsung kirim teks jadi. Pakai langsung!
+                        this.outputText = rawText;
+                    }
+                    // ------------------------------------
+
+                } catch (e) {
+                    console.error(e);
+                    alert("Terjadi kesalahan jaringan atau server.");
+                } finally {
+                    this.isLoading = false;
+                    this.$nextTick(() => lucide.createIcons());
+                }
+            },
+
+            renderMarkdown(text) { return this.converter.makeHtml(text || ''); },
+
+            copyResult() {
+                const el = document.getElementById('output-content');
+                if(el) {
+                    navigator.clipboard.writeText(el.innerText);
+                    alert("Teks berhasil disalin!");
+                }
+            },
+            
+            exportDoc() {
+                const el = document.getElementById('output-content');
+                if(el) {
+                    const html = el.innerHTML;
+                    const blob = htmlDocx.asBlob(html, { orientation: 'portrait', margins: { top: 720 } });
+                    saveAs(blob, 'OnThesis-Paraphrase.docx');
+                }
+            }
+        }
+    }
+</script>
+{% endblock %}

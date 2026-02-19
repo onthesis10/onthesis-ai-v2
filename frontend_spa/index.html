@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnThesis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet" />
+    <script>
+        // Prevent FOUC: apply theme before render
+        (function () {
+            try {
+                var t = localStorage.getItem('onthesis-theme') || 'light';
+                if (t === 'dark') document.documentElement.classList.add('dark');
+                if (t === 'happy') document.documentElement.classList.add('happy');
+            } catch (e) { }
+        })();
+    </script>
+</head>
+
+<body class="antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

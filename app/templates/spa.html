@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OnThesis</title>
+    <meta name="description"
+        content="OnThesis helps you write your thesis with AI-powered writing assistance and data analysis.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <!-- Theme FOUC Prevention -->
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('onthesis-theme') || 'light';
+                if (t === 'dark') document.documentElement.classList.add('dark');
+                if (t === 'happy') document.documentElement.classList.add('happy');
+            } catch (e) { }
+        })();
+    </script>
+
+    <!-- SPA Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='js/dist/spa-style.css') }}">
+</head>
+
+<body class="antialiased">
+    <div id="root"></div>
+
+    <!-- Firebase Auth Token (if available) -->
+    {% if firebase_custom_token %}
+    <script>window.__FIREBASE_TOKEN__ = "{{ firebase_custom_token }}";</script>
+    {% endif %}
+
+    <!-- SPA Bundle -->
+    <script type="module" src="{{ url_for('static', filename='js/dist/spa-bundle.js') }}"></script>
+</body>
+
+</html>

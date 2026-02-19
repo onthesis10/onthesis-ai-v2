@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}OnChat - AI Research Assistant{% endblock %}
+
+{% block page_styles %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+<style>
+    /* --- THEME SYNCHRONIZATION --- */
+    /* Menggunakan variabel dari styles.css agar sinkron Light/Dark Mode */
+    .chat-container {
+        height: calc(100vh - 5rem); /* Full height minus header base */
+        background-color: var(--bg-page);
+        color: var(--text-primary);
+        font-family: inherit; /* Ikuti font base.html */
+        position: relative;
+    }
+
+    /* --- CHAT BUBBLES --- */
+    /* User: Menggunakan warna Input/Card dengan sudut tumpul */
+    .bubble-user {
+        background-color: var(--bg-input); /* #F5F5F7 (Light) / #2C2C2E (Dark) */
+        color: var(--text-primary);
+        border-radius: 24px;
+        padding: 12px 20px;
+        max-width: 85%;
+        font-size: 1rem;
+        line-height: 1.6;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    /* AI: Transparan, teks bersih */
+    .bubble-ai {
+        background: transparent;
+        color: var(--text-primary);
+        padding: 0;
+        width: 100%;
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+    /* Typography untuk Markdown AI */
+    .prose-ai p { margin-bottom: 1rem; }
+    .prose-ai strong { font-weight: 700; color: var(--text-primary); }
+    .prose-ai ul, .prose-ai ol { margin-bottom: 1rem; padding-left: 1.25rem; }
+    .prose-ai li { margin-bottom: 0.25rem; }
+    .prose-ai code { 
+        font-family: 'JetBrains Mono', monospace; 
+        background-color: var(--bg-hover);
+        color: var(--text-primary);
+        padding: 0.2em 0.4em; 
+        border-radius: 6px; 
+        font-size: 0.9em; 
+        font-weight: 600;
+    }
+    .prose-ai pre {
+        background-color: var(--bg-card); /* Card color background */
+        color: var(--text-primary);
+        padding: 1rem;
+        border-radius: 16px;
+        overflow-x: auto;
+        border: 1px solid var(--border-light);
+        margin: 1rem 0;
+    }
+
+    /* --- INPUT BAR (SUPER ROUNDED) --- */
+    .input-wrapper {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 32px; /* Kapsul Penuh */
+        padding: 8px 8px 8px 20px;
+        display: flex;
+        align-items: flex-end; /* Align bottom untuk multiline */
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+    
+    .input-wrapper:focus-within {
+        border-color: var(--text-secondary); /* Highlight halus */
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+        transform: translateY(-1px);
+    }
+
+    textarea.chat-input {
+        background: transparent !important;
+        border: none !important;
+        outline: none;
+        resize: none;
+        color: var(--text-primary) !important;
+        font-size: 1rem;
+        line-height: 1.5;
+        width: 100%;
+        max-height: 180px;
+        padding: 10px 0;
+        font-family: inherit;
+    }
+    textarea.chat-input::placeholder { color: var(--text-secondary); opacity: 0.6; }
+
+    /* --- GREETING TEXT (Gradient) --- */
+    .greeting-text {
+        background: linear-gradient(90deg, #4285F4, #9B72CB, #D96570);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+    }
+
+    /* --- SUGGESTION CARDS --- */
+    .suggestion-card {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 20px;
+        transition: all 0.2s ease;
+    }
+    .suggestion-card:hover {
+        background-color: var(--bg-hover);
+        border-color: var(--text-secondary);
+        transform: translateY(-2px);
+    }
+
+    /* Scrollbar Halus */
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background-color: var(--border-light); border-radius: 99px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+
+    /* Typing Dots */
+    .typing-dot { width: 6px; height: 6px; background-color: var(--text-secondary); border-radius: 50%; animation: typing 1.4s infinite ease-in-out both; }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="chatApp()" class="chat-container flex flex-col w-full">
+    
+    <header class="h-16 shrink-0 flex items-center justify-between px-6 md:px-8 sticky top-0 z-20 bg-bg-page/90 backdrop-blur-md">
+        
+        <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+            <button @click="open = !open" 
+                    class="flex items-center gap-2 px-4 py-2 rounded-full hover:bg-bg-hover transition-colors text-text-primary group border border-transparent hover:border-border-light">
+                <span class="text-sm font-bold tracking-tight" x-text="activeProjectName || 'Pilih Proyek Skripsi'"></span>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-text-secondary group-hover:text-text-primary transition-colors" :class="open ? 'rotate-180' : ''"></i>
+            </button>
+            
+            <div x-show="open" x-cloak x-transition.opacity.duration.150ms 
+                 class="absolute top-full left-0 mt-2 w-72 bg-bg-card border border-border-light rounded-2xl shadow-xl py-2 z-50 overflow-hidden">
+                <div class="px-5 py-2 text-[10px] font-bold text-text-secondary uppercase tracking-widest bg-bg-input/50 border-b border-border-light">
+                    Konteks Data
+                </div>
+                <div class="max-h-64 overflow-y-auto custom-scroll p-2 space-y-1">
+                    <template x-for="p in projects" :key="p.id">
+                        <button @click="selectProject(p); open = false" 
+                                class="w-full text-left px-4 py-3 rounded-xl flex items-center justify-between transition-colors group"
+                                :class="projectId === p.id ? 'bg-bg-input text-text-primary' : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'">
+                            <div class="min-w-0">
+                                <div class="text-sm font-bold truncate" x-text="p.title"></div>
+                                <div class="text-[10px] opacity-60" x-text="'Updated ' + formatDate(p.updated_at)"></div>
+                            </div>
+                            <i x-show="projectId === p.id" data-lucide="check" class="w-4 h-4 text-text-primary"></i>
+                        </button>
+                    </template>
+                </div>
+                <div x-show="projects.length === 0" class="px-5 py-4 text-xs text-text-secondary text-center">
+                    Belum ada proyek. <a href="/projects" class="font-bold hover:underline">Buat Proyek</a>
+                </div>
+            </div>
+        </div>
+
+    </header>
+
+    <div id="chat-window" class="flex-1 overflow-y-auto custom-scroll px-4 md:px-0 scroll-smooth">
+        <div class="max-w-[800px] mx-auto w-full py-8 pb-12">
+            
+            <div x-show="!hasMessages" class="flex flex-col items-start justify-center min-h-[50vh] px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <h2 class="text-4xl md:text-5xl font-bold tracking-tight mb-2">
+                    <span class="greeting-text">Halo, {{ current_user.username }}</span>
+                </h2>
+                <h3 class="text-4xl md:text-5xl font-medium text-text-secondary opacity-40 mb-12">
+                    Ada yang bisa dibantu?
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 w-full mt-2" x-show="projectId">
+                    <button @click="sendQuick('Identifikasi gap penelitian dari judul ini.')" class="suggestion-card p-5 h-40 flex flex-col justify-between group text-left">
+                        <p class="text-sm font-medium text-text-primary group-hover:text-main">Cari celah riset dari judul ini</p>
+                        <div class="w-9 h-9 rounded-full bg-bg-input flex items-center justify-center self-end group-hover:scale-110 transition-transform">
+                            <i data-lucide="compass" class="w-4.5 h-4.5 text-text-secondary group-hover:text-text-primary"></i>
+                        </div>
+                    </button>
+                    
+                    <button @click="sendQuick('Buatkan kerangka konsep.')" class="suggestion-card p-5 h-40 flex flex-col justify-between group text-left">
+                        <p class="text-sm font-medium text-text-primary">Buatkan kerangka konsep</p>
+                        <div class="w-9 h-9 rounded-full bg-bg-input flex items-center justify-center self-end group-hover:scale-110 transition-transform">
+                            <i data-lucide="share-2" class="w-4.5 h-4.5 text-text-secondary group-hover:text-text-primary"></i>
+                        </div>
+                    </button>
+
+                    <button @click="sendQuick('Saran metode analisis data.')" class="suggestion-card p-5 h-40 flex flex-col justify-between group text-left">
+                        <p class="text-sm font-medium text-text-primary">Metode analisis data yang cocok</p>
+                        <div class="w-9 h-9 rounded-full bg-bg-input flex items-center justify-center self-end group-hover:scale-110 transition-transform">
+                            <i data-lucide="bar-chart-2" class="w-4.5 h-4.5 text-text-secondary group-hover:text-text-primary"></i>
+                        </div>
+                    </button>
+                    
+                     <button @click="sendQuick('Review bab 1 saya.')" class="suggestion-card p-5 h-40 flex flex-col justify-between group text-left">
+                        <p class="text-sm font-medium text-text-primary">Review draft Bab 1</p>
+                        <div class="w-9 h-9 rounded-full bg-bg-input flex items-center justify-center self-end group-hover:scale-110 transition-transform">
+                            <i data-lucide="file-check" class="w-4.5 h-4.5 text-text-secondary group-hover:text-text-primary"></i>
+                        </div>
+                    </button>
+                </div>
+
+                <div x-show="!projectId" class="mt-8 flex items-center gap-3 text-text-primary bg-bg-card border border-border-light px-6 py-4 rounded-2xl shadow-sm">
+                    <i data-lucide="arrow-up-left" class="w-5 h-5 text-text-secondary"></i>
+                    <span class="text-sm font-medium">Pilih proyek di kiri atas untuk memulai sesi.</span>
+                </div>
+            </div>
+
+            <div id="messages-container" class="space-y-6 md:space-y-8 pb-4"></div>
+            
+            <div x-show="isGenerating && !streamingContent" class="flex justify-start px-0 opacity-70 mt-4">
+                <div class="flex items-center gap-2 px-2">
+                    <i data-lucide="sparkles" class="w-5 h-5 text-text-secondary animate-pulse"></i>
+                    <span class="text-sm text-text-secondary">Sedang berpikir...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="shrink-0 px-4 md:px-0 pb-8 pt-2 w-full z-30 bg-bg-page transition-colors">
+        <div class="max-w-[800px] mx-auto relative px-2 md:px-0">
+            
+            <div class="input-wrapper group">
+                <textarea x-model="inputMessage" 
+                          x-ref="chatInput"
+                          @keydown.enter.prevent="if(!$event.shiftKey) sendMessage()"
+                          @input="adjustHeight()"
+                          rows="1" 
+                          placeholder="Tanyakan sesuatu pada AI..." 
+                          class="chat-input custom-scroll"
+                          :disabled="isGenerating"></textarea>
+                
+                <div class="flex items-center gap-2 shrink-0 pb-1 pr-1">
+                    <button class="p-2.5 rounded-full text-text-secondary hover:bg-bg-hover hover:text-text-primary transition" title="Upload Gambar">
+                        <i data-lucide="image-plus" class="w-5 h-5"></i>
+                    </button>
+                    
+                    <button @click="sendMessage()" 
+                            :disabled="!inputMessage.trim() || isGenerating"
+                            class="p-2.5 rounded-full bg-text-primary text-text-inverse disabled:opacity-30 disabled:bg-bg-input disabled:text-text-secondary disabled:cursor-not-allowed transition-all hover:scale-105 shadow-md">
+                        <i data-lucide="send-horizontal" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <p class="text-center text-[11px] text-text-secondary mt-3 opacity-60 font-medium">
+                OnChat dapat membuat kesalahan. Cek referensi asli.
+            </p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function chatApp() {
+        return {
+            inputMessage: '',
+            isGenerating: false,
+            hasMessages: false,
+            streamingContent: false,
+            projects: [],
+            projectId: '',
+            activeProjectName: '',
+            converter: new showdown.Converter({ tables: true, strikethrough: true, simpleLineBreaks: true }),
+
+            async init() {
+                await this.loadProjects();
+                this.$nextTick(() => {
+                    lucide.createIcons();
+                    this.adjustHeight();
+                });
+            },
+
+            async loadProjects() {
+                try {
+                    const res = await fetch('/api/projects');
+                    const data = await res.json();
+                    if(data.status === 'success') {
+                        this.projects = data.projects;
+                        if(this.projects.length > 0) this.selectProject(this.projects[0]);
+                    }
+                } catch(e) { console.error(e); }
+            },
+
+            selectProject(p) {
+                this.projectId = p.id;
+                this.activeProjectName = p.title;
+                this.hasMessages = false; 
+                document.getElementById('messages-container').innerHTML = ''; 
+                this.$nextTick(() => {
+                    if(this.$refs.chatInput) this.$refs.chatInput.focus();
+                });
+            },
+
+            adjustHeight() {
+                const el = this.$refs.chatInput;
+                if(!el) return;
+                el.style.height = 'auto';
+                el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+            },
+
+            sendQuick(text) {
+                this.inputMessage = text;
+                this.adjustHeight();
+                this.sendMessage();
+            },
+
+            formatDate(ts) { return new Date().toLocaleDateString('id-ID'); },
+
+            async sendMessage() {
+                const msg = this.inputMessage.trim();
+                if (!msg || this.isGenerating || !this.projectId) {
+                    if(!this.projectId) alert("Pilih proyek terlebih dahulu.");
+                    return;
+                }
+
+                this.hasMessages = true;
+                this.inputMessage = ''; 
+                this.adjustHeight();
+                this.isGenerating = true;
+
+                this.appendBubble(true, msg);
+                const aiBubbleId = 'ai-' + Date.now();
+                const aiContentDiv = this.appendBubble(false, '', aiBubbleId);
+
+                try {
+                    const response = await fetch('/chat/stream', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: msg, projectId: this.projectId }) 
+                    });
+
+                    if (!response.ok) throw new Error("Gagal terhubung ke AI.");
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let fullText = "";
+                    this.streamingContent = true;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        fullText += decoder.decode(value, { stream: true });
+                        aiContentDiv.innerHTML = this.converter.makeHtml(fullText);
+                        this.scrollToBottom();
+                    }
+
+                } catch (e) {
+                    aiContentDiv.innerHTML = `<span class="text-red-500 font-bold text-sm">Error: ${e.message}</span>`;
+                } finally {
+                    this.isGenerating = false;
+                    this.streamingContent = false;
+                    this.$nextTick(() => {
+                        this.$refs.chatInput.focus();
+                        lucide.createIcons();
+                    });
+                }
+            },
+
+            appendBubble(isUser, text, id = null) {
+                const container = document.getElementById('messages-container');
+                const wrapper = document.createElement('div');
+                wrapper.className = `flex w-full ${isUser ? 'justify-end' : 'justify-start gap-4'}`;
+                
+                if (isUser) {
+                    wrapper.innerHTML = `<div class="bubble-user">${text.replace(/\n/g, '<br>')}</div>`;
+                } else {
+                    wrapper.innerHTML = `
+                        <div class="w-8 h-8 rounded-full bg-bg-card border border-border-light flex items-center justify-center shrink-0 mt-0.5">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-text-primary"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div id="${id}" class="bubble-ai prose prose-sm prose-ai max-w-none">
+                                <div class="flex items-center gap-1.5 h-6">
+                                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                container.appendChild(wrapper);
+                this.scrollToBottom();
+                lucide.createIcons();
+                
+                if(!isUser && id) return wrapper.querySelector(`#${id}`);
+                return null;
+            },
+
+            scrollToBottom() {
+                const win = document.getElementById('chat-window');
+                win.scrollTop = win.scrollHeight;
+            }
+        }
+    }
+</script>
+{% endblock %}

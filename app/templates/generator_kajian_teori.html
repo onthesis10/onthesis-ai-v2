@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}Kajian Teori AI - OnThesis{% endblock %}
+
+{% block page_styles %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<style>
+    /* --- PRODUCTION STUDIO LAYOUT --- */
+    
+    .studio-wrapper {
+        height: calc(100vh - 6rem);
+        min-height: 600px;
+    }
+
+    /* Card Component (Consistent with Paraphrase Page) */
+    .editor-card {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 24px;
+        box-shadow: var(--shadow-card);
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .editor-card:focus-within {
+        border-color: var(--primary);
+        box-shadow: var(--shadow-glow);
+    }
+
+    /* Form Elements */
+    .input-field {
+        background: var(--bg-page);
+        border: 1px solid var(--border-light);
+        color: var(--text-primary);
+        border-radius: 14px;
+        padding: 12px 16px;
+        width: 100%;
+        transition: all 0.2s;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 0.95rem;
+    }
+    
+    .input-field:focus {
+        border-color: var(--primary);
+        background: var(--bg-card);
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+        outline: none;
+    }
+
+    /* Custom Select with Icon */
+    .select-field {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.75rem center;
+        background-repeat: no-repeat;
+        background-size: 1.25em 1.25em;
+        cursor: pointer;
+    }
+    html.dark .select-field {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    }
+
+    /* Result Area */
+    .result-area {
+        background: transparent;
+        border: none;
+        width: 100%;
+        height: 100%;
+        outline: none;
+        padding: 0;
+    }
+
+    /* Typography in Editor */
+    .prose h1, .prose h2, .prose h3 { color: var(--text-primary); font-weight: 700; margin-top: 1.5em; margin-bottom: 0.5em; }
+    .prose p { margin-bottom: 1em; line-height: 1.7; color: var(--text-primary); }
+    .prose strong { color: var(--primary); }
+    .prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1em; }
+    .prose li { margin-bottom: 0.5em; }
+
+    /* Scrollbar */
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background-color: var(--border-light); border-radius: 99px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="kajianTeoriApp()" 
+     class="studio-wrapper flex flex-col gap-6"
+     data-user-pro="{{ 'true' if current_user.is_pro else 'false' }}">
+
+    <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+        
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                <i data-lucide="book-open-check" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black text-[var(--text-primary)] tracking-tight">Kajian Teori AI</h1>
+                <p class="text-sm text-[var(--text-secondary)] font-medium">Generator Bab 2 otomatis & terstruktur.</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4 bg-[var(--bg-card)] p-1.5 pr-2 rounded-2xl border border-[var(--border-light)] shadow-sm">
+            
+            <div class="hidden sm:flex items-center gap-2 px-3 border-r border-[var(--border-light)]">
+                <div class="w-2 h-2 rounded-full" :class="isPro ? 'bg-green-500' : 'bg-gray-300'"></div>
+                <span class="text-xs font-bold uppercase tracking-wider" :class="isPro ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'" x-text="isPro ? 'Pro Active' : 'Free Mode'"></span>
+            </div>
+            
+            <button @click="generateKajian()" 
+                    :disabled="isLoading || !topic" 
+                    class="btn-vibrant h-10 px-6 rounded-xl flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                <i x-show="!isLoading" data-lucide="sparkles" class="w-4 h-4"></i>
+                <i x-show="isLoading" data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                <span x-text="isLoading ? 'Menulis...' : 'Generate Bab 2'"></span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
+        
+        <div class="lg:col-span-4 flex flex-col gap-4 h-full overflow-hidden">
+            <div class="editor-card flex-1 p-6 gap-6 overflow-y-auto custom-scroll">
+                
+                <div>
+                    <label class="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2 block flex items-center gap-2">
+                        <i data-lucide="heading" class="w-3 h-3"></i> Judul / Topik Penelitian
+                    </label>
+                    <textarea x-model="topic" 
+                              rows="5" 
+                              class="input-field resize-none" 
+                              placeholder="Contoh: Pengaruh Work Life Balance dan Kompensasi terhadap Kepuasan Kerja Karyawan Gen Z..."></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2 block">Variabel</label>
+                        <div class="relative">
+                            <select x-model="numVariables" class="input-field select-field">
+                                <option value="1">1 Variabel</option>
+                                <option value="2">2 Variabel</option>
+                                <option value="3">3 Variabel</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest mb-2 block">Bahasa</label>
+                        <div class="relative opacity-70 cursor-not-allowed">
+                            <select class="input-field select-field bg-[var(--bg-page)]" disabled>
+                                <option>Indonesia</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto bg-[var(--bg-page)] rounded-xl p-4 border border-[var(--border-light)] flex gap-3">
+                    <div class="shrink-0 text-blue-500 mt-0.5"><i data-lucide="info" class="w-4 h-4"></i></div>
+                    <div class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                        <strong class="text-[var(--text-primary)]">Tips:</strong> Masukkan judul lengkap agar AI dapat mengidentifikasi variabel independen (X) dan dependen (Y) secara akurat.
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="lg:col-span-8 flex flex-col gap-3 h-full">
+            
+            <div class="flex justify-between items-end px-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-widest">Draft Hasil</span>
+                    <span x-show="outputText" x-transition class="px-2 py-0.5 rounded bg-green-500/10 text-green-500 text-[10px] font-bold flex items-center gap-1">
+                        <i data-lucide="check" class="w-3 h-3"></i> Ready
+                    </span>
+                </div>
+                
+                <div class="flex gap-2" x-show="outputText" x-transition>
+                    <button @click="copyResult()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-light)] text-[var(--text-secondary)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all text-xs font-bold">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin
+                    </button>
+                    <button @click="exportDoc()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-light)] text-[var(--text-secondary)] hover:text-blue-600 hover:border-blue-600 transition-all text-xs font-bold">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Word
+                    </button>
+                </div>
+            </div>
+
+            <div class="editor-card flex-1 p-8 transition-colors duration-300 relative" 
+                 :class="outputText ? 'bg-[var(--bg-card)]' : 'bg-[var(--bg-card)]/50'">
+                
+                <div x-show="!outputText && !isLoading" class="absolute inset-0 flex flex-col items-center justify-center text-[var(--text-secondary)] opacity-40 select-none pointer-events-none">
+                    <div class="w-24 h-24 rounded-full border-2 border-dashed border-[var(--border-light)] flex items-center justify-center mb-4">
+                        <i data-lucide="library" class="w-10 h-10 text-[var(--text-secondary)]"></i>
+                    </div>
+                    <h3 class="text-sm font-bold uppercase tracking-widest mb-1">Area Kerja Kosong</h3>
+                    <p class="text-xs">Isi form di sebelah kiri untuk memulai.</p>
+                </div>
+
+                <div x-show="isLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center backdrop-blur-sm bg-[var(--bg-card)]/70">
+                    <div class="relative">
+                        <div class="w-16 h-16 border-4 border-[var(--border-light)] rounded-full"></div>
+                        <div class="absolute top-0 left-0 w-16 h-16 border-4 border-[var(--primary)] rounded-full animate-spin border-t-transparent"></div>
+                    </div>
+                    <p class="mt-5 text-xs font-bold text-[var(--primary)] animate-pulse tracking-widest uppercase">Sedang Riset Teori...</p>
+                </div>
+
+                <div x-show="outputText" class="h-full overflow-y-auto custom-scroll pr-2">
+                    <div id="output-content" 
+                         class="prose prose-lg max-w-none text-[var(--text-primary)]" 
+                         x-html="renderMarkdown(outputText)"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    function kajianTeoriApp() {
+        return {
+            isPro: false,
+            topic: '',
+            numVariables: '2',
+            outputText: '',
+            isLoading: false,
+            
+            converter: new showdown.Converter({ simpleLineBreaks: true }),
+
+            init() {
+                this.isPro = this.$el.dataset.userPro === 'true';
+                this.$nextTick(() => lucide.createIcons());
+            },
+
+            async generateKajian() {
+                if (!this.topic.trim()) return;
+                
+                this.isLoading = true;
+                this.outputText = '';
+
+                try {
+                    const response = await fetch('/generate_kajian_teori', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            topic: this.topic,
+                            num_variables: this.numVariables
+                        })
+                    });
+
+                    // Handle Stream/Text Response
+                    const rawText = await response.text();
+                    
+                    // Try parsing if backend sends JSON error, otherwise assume text stream
+                    try {
+                        const data = JSON.parse(rawText);
+                        if (data.result) {
+                            this.outputText = data.result;
+                        } else if (data.error) {
+                            this.outputText = "**Error:** " + data.error;
+                        } else {
+                            this.outputText = rawText; 
+                        }
+                    } catch (e) {
+                        this.outputText = rawText; // Valid output content
+                    }
+
+                } catch (e) {
+                    console.error(e);
+                    alert("Gagal terhubung ke server.");
+                } finally {
+                    this.isLoading = false;
+                    this.$nextTick(() => lucide.createIcons());
+                }
+            },
+
+            renderMarkdown(text) { 
+                return this.converter.makeHtml(text || ''); 
+            },
+
+            copyResult() {
+                const el = document.getElementById('output-content');
+                if(el) {
+                    navigator.clipboard.writeText(el.innerText);
+                    alert("Draft berhasil disalin!");
+                }
+            },
+            
+            exportDoc() {
+                const el = document.getElementById('output-content');
+                if(el) {
+                    // Simple styling for Word Doc
+                    const html = `
+                        <html>
+                            <head>
+                                <style>
+                                    body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #000; }
+                                    h1, h2, h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+                                    p { margin-bottom: 1em; }
+                                </style>
+                            </head>
+                            <body>${el.innerHTML}</body>
+                        </html>`;
+                    
+                    const blob = htmlDocx.asBlob(html, { 
+                        orientation: 'portrait', 
+                        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 } 
+                    });
+                    saveAs(blob, 'Bab2-KajianTeori.docx');
+                }
+            }
+        }
+    }
+</script>
+{% endblock %}

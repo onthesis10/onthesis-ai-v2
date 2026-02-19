@@ -1,0 +1,218 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   🌊 ONTHESIS DESIGN SYSTEM
+   3 Theme Modes: Light, Dark, Happy
+   ============================================ */
+
+@layer base {
+
+  /* ---------- LIGHT (Ocean Scholar - Clean Academic Confidence) ---------- */
+  :root {
+    
+    /* Branding */
+    --ocean-1: #0EA5E9;
+    --ocean-2: #0284C7;
+    --ocean-highlight: #38BDF8;
+    --ink: #0F172A; /* Slate 900 */
+
+    /* Semantic Colors - Glassmorphism Base */
+    --background: 210 40% 98%; /* Soft Cool White */
+    --foreground: 222 47% 12%; /* Deep Navy Text */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 12%;
+
+    --primary: 199 89% 48%; /* Bright Sky Blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 199 89% 48%;
+
+    --radius: 1rem;
+
+    /* Sidebar */
+    --sidebar-bg: 210 40% 98%;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    --sidebar-accent: 199 89% 48%;
+
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* ---------- DARK (Deep Abyss - Neon & Glow) ---------- */
+  .dark {
+    /* Deep Ocean Palette */
+    --ocean-1: #38BDF8; /* Sky 400 - Neon Glow */
+    --ocean-2: #0EA5E9; /* Sky 500 */
+    --ocean-highlight: #7DD3FC;
+    --ink: #F8FAFC;
+
+    /* Backgrounds - Deep Midnight Blue */
+    --background: 224 71% 4%; /* Very Dark Blue */
+    --foreground: 210 40% 98%;
+
+    --card: 224 71% 6%; /* Slightly lighter deep blue */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 224 71% 6%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 199 89% 48%; /* Electric Blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 199 89% 48%;
+
+    --sidebar-bg: 224 71% 4%;
+    --sidebar-border: 217.2 32.6% 12%;
+    --sidebar-accent: 199 89% 48%;
+  }
+
+  /* ---------- HAPPY (Tropical Oasis - Vibrant & Refreshing) ---------- */
+  .happy {
+    /* Tropical Palette */
+    --ocean-1: #2DD4BF; /* Teal 400 */
+    --ocean-2: #14B8A6; /* Teal 500 */
+    --ocean-highlight: #5EEAD4; /* Teal 300 */
+    --ink: #134E4A; /* Teal 900 */
+
+    /* Backgrounds - Soft Caribbean Water */
+    --background: 170 60% 97%; /* Very pale teal/cyan */
+    --foreground: 180 40% 15%; /* Deep Teal Text */
+
+    --card: 0 0% 100%; /* Pure White Glass */
+    --card-foreground: 180 40% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 180 40% 15%;
+
+    --primary: 175 80% 40%; /* Strong Tropical Teal */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 170 50% 92%;
+    --secondary-foreground: 180 40% 15%;
+
+    --muted: 170 50% 92%;
+    --muted-foreground: 180 20% 50%;
+
+    --accent: 170 60% 90%;
+    --accent-foreground: 180 40% 15%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* Crisp Borders */
+    --border: 175 30% 85%;
+    --input: 175 30% 85%;
+    --ring: 175 80% 40%;
+
+    --sidebar-bg: 170 60% 95%;
+    --sidebar-border: 175 30% 88%;
+    --sidebar-accent: 175 80% 40%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 99px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/30 rounded-2xl shadow-sm;
+  }
+
+  .glass-sidebar {
+    background: hsl(var(--sidebar-bg));
+    border-right: 1px solid hsl(var(--sidebar-border) / 0.5);
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm shadow-primary/20;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-muted-foreground font-medium text-sm hover:bg-muted/50 hover:text-foreground active:scale-[0.98] transition-all duration-200;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-border/30 text-foreground font-semibold text-sm hover:bg-muted/30 hover:border-border/50 active:scale-[0.98] transition-all duration-200;
+  }
+
+  .widget-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/20 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300;
+  }
+
+  .stat-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/20 rounded-2xl shadow-sm p-5 flex flex-col justify-between h-40 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300;
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
+  }
+
+  .glass-btn {
+    @apply relative overflow-hidden backdrop-blur-md border border-white/10 transition-all duration-300;
+  }
+}

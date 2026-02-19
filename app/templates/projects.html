@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+
+{% block title %}My Projects - OnThesis{% endblock %}
+
+{% block page_styles %}
+<script>
+    if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+</script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://npmcdn.com/flatpickr/dist/themes/dark.css" media="(prefers-color-scheme: dark)">
+
+<style>
+    /* --- MENERAPKAN CSS "HAPPY OCEAN" & "DEEP BIOLUMINESCENCE" --- */
+    
+    :root {
+        /* LIGHT MODE (Happy Ocean) */
+        --bg-page: #F0F7FF;
+        --bg-card: #FFFFFF;
+        --bg-glass: rgba(255, 255, 255, 0.65);
+        
+        --primary: #007AFF;
+        --primary-hover: #0056B3;
+        --secondary: #00C6FF;
+        --accent: #5E5CE6;
+        
+        --text-primary: #1D1D1F;
+        --text-secondary: #86868B;
+        
+        --border-light: #EBF2FA;
+        
+        --grad-ocean: linear-gradient(135deg, #007AFF 0%, #00C6FF 100%);
+        --shadow-sm: 0 4px 6px -1px rgba(0, 122, 255, 0.05);
+        --shadow-glow: 0 10px 40px -10px rgba(0, 122, 255, 0.2);
+        --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.04);
+    }
+
+    html.dark {
+        /* DARK MODE (Deep Bioluminescence - Navy Look) */
+        --bg-page: #0B1120; /* Deep Ocean Blue Background */
+        --bg-card: #151E32; /* Navy Card */
+        --bg-glass: rgba(21, 30, 50, 0.7);
+        
+        --primary: #3B82F6;
+        --secondary: #22D3EE;
+        
+        --text-primary: #F0F9FF; /* Putih terang */
+        --text-secondary: #94A3B8;
+        
+        --border-light: #1E293B; /* Border gelap */
+        
+        --grad-surface: linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(30, 41, 59, 0.4) 100%);
+        --shadow-glow: 0 10px 40px -10px rgba(34, 211, 238, 0.15);
+    }
+
+    /* Override Body Background agar sesuai CSS Anda */
+    body {
+        background-color: var(--bg-page) !important;
+        color: var(--text-primary);
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+        transition: background-color 0.4s ease, color 0.3s ease;
+        /* Pattern Halus */
+        background-image: 
+            radial-gradient(circle at 10% 20%, rgba(0, 122, 255, 0.08) 0%, transparent 40%),
+            radial-gradient(circle at 90% 80%, rgba(0, 198, 255, 0.08) 0%, transparent 40%);
+        background-attachment: fixed;
+    }
+
+    /* --- COMPONENTS SESUAI PERMINTAAN --- */
+
+    /* 1. Card Bento (Navy di Dark Mode) */
+    .card-bento {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 28px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow-card);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s, border-color 0.3s;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .card-bento:hover {
+        transform: translateY(-4px) scale(1.01);
+        box-shadow: var(--shadow-glow);
+        border-color: var(--primary); /* Glow biru saat hover */
+    }
+
+    /* 2. Vibrant Buttons */
+    .btn-vibrant {
+        background: var(--grad-ocean);
+        color: white;
+        border-radius: 20px;
+        padding: 0.6rem 1.4rem;
+        font-weight: 700;
+        font-size: 0.9rem;
+        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
+        transition: all 0.2s ease;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .btn-vibrant:hover {
+        box-shadow: 0 8px 25px rgba(0, 122, 255, 0.4);
+        transform: translateY(-1px);
+        opacity: 0.95;
+    }
+
+    /* 3. Icon Box (Warna-warni sesuai CSS) */
+    .icon-box {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .card-bento:hover .icon-box {
+        transform: scale(1.1) rotate(-5deg);
+    }
+
+    /* Helper Colors (Light/Dark Adjustments) */
+    .bg-blue-soft { background: #E0F2FE; color: #0284C7; }
+    html.dark .bg-blue-soft { background: rgba(56, 189, 248, 0.15); color: #38BDF8; }
+    
+    .bg-green-soft { background: #DCFCE7; color: #166534; }
+    html.dark .bg-green-soft { background: rgba(74, 222, 128, 0.15); color: #4ADE80; }
+
+    .bg-orange-soft { background: #FFEDD5; color: #C2410C; }
+    html.dark .bg-orange-soft { background: rgba(251, 146, 60, 0.15); color: #FB923C; }
+
+    /* 4. Inputs & Search */
+    .input-ocean {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        color: var(--text-primary);
+        border-radius: 16px;
+        padding: 10px 16px;
+        width: 100%;
+        transition: all 0.2s;
+    }
+    .input-ocean:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+        outline: none;
+    }
+
+    /* 5. Filter Tabs */
+    .tab-pill {
+        padding: 8px 18px;
+        border-radius: 99px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        background: transparent;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+    }
+    .tab-pill.active {
+        background: var(--bg-card);
+        color: var(--primary);
+        box-shadow: var(--shadow-sm);
+        border-color: var(--border-light);
+    }
+    .tab-pill:not(.active):hover {
+        background: rgba(0,0,0,0.05);
+        color: var(--text-primary);
+    }
+    html.dark .tab-pill:not(.active):hover { background: rgba(255,255,255,0.05); }
+
+    /* 6. Modal (Solid Card Color) */
+    .modal-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        box-shadow: var(--shadow-glow);
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--text-secondary); border-radius: 10px; opacity: 0.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8 pb-12" x-data="projectsApp" @firebase-ready.window="initFirebase($event.detail)">
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-black tracking-tight text-[var(--text-primary)]">
+                My Project
+            </h1>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <div class="relative w-full sm:w-64">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]"></i>
+                <input type="text" x-model="searchQuery" placeholder="Cari judul..." class="input-ocean pl-10 font-medium">
+            </div>
+            
+            <button @click="openModal()" class="btn-vibrant shrink-0 justify-center">
+                <i data-lucide="plus" class="w-5 h-5"></i> 
+                <span>Buat Baru</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
+        <button @click="filter = 'all'" class="tab-pill" :class="filter === 'all' ? 'active' : ''">Semua</button>
+        <button @click="filter = 'active'" class="tab-pill" :class="filter === 'active' ? 'active' : ''">Proses</button>
+        <button @click="filter = 'done'" class="tab-pill" :class="filter === 'done' ? 'active' : ''">Selesai</button>
+    </div>
+
+    <div class="min-h-[400px]">
+        
+        <template x-if="loading">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="card-bento h-56 animate-pulse">
+                    <div class="w-12 h-12 bg-gray-200 dark:bg-white/10 rounded-2xl mb-4"></div>
+                    <div class="h-4 w-3/4 bg-gray-200 dark:bg-white/10 rounded mb-2"></div>
+                    <div class="h-3 w-1/2 bg-gray-200 dark:bg-white/10 rounded"></div>
+                </div>
+            </div>
+        </template>
+
+        <template x-if="!loading && filteredProjects.length === 0">
+            <div class="py-24 text-center opacity-60">
+                <div class="icon-box bg-blue-soft mx-auto mb-4">
+                    <i data-lucide="folder-open" class="w-6 h-6"></i>
+                </div>
+                <h3 class="font-bold text-lg text-[var(--text-primary)]">Belum ada proyek</h3>
+                <p class="text-sm text-[var(--text-secondary)] mt-1">Mulai penelitianmu sekarang.</p>
+            </div>
+        </template>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" x-show="!loading && filteredProjects.length > 0">
+            <template x-for="project in filteredProjects" :key="project.id">
+                <div class="card-bento cursor-pointer group" @click="goToProject(project.id)">
+                    
+                    <div class="flex justify-between items-start mb-5">
+                        <div class="icon-box" 
+                             :class="project.status === 'SELESAI' ? 'bg-green-soft' : (project.status === 'REVISI' ? 'bg-orange-soft' : 'bg-blue-soft')">
+                            <i :data-lucide="project.status === 'SELESAI' ? 'check' : 'file-text'" class="w-6 h-6"></i>
+                        </div>
+
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click.stop="open = !open" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 text-[var(--text-secondary)] transition-colors">
+                                <i data-lucide="more-horizontal" class="w-5 h-5"></i>
+                            </button>
+                            <div x-show="open" @click.outside="open = false" x-transition
+                                 class="absolute right-0 top-full mt-2 w-40 bg-[var(--bg-card)] border border-[var(--border-light)] rounded-2xl shadow-xl z-20 overflow-hidden">
+                                <button @click.stop="openModal(project); open=false" class="w-full text-left px-4 py-3 text-xs font-bold hover:bg-gray-50 dark:hover:bg-white/5 text-[var(--text-primary)]">
+                                    Edit Detail
+                                </button>
+                                <button @click.stop="deleteProject(project.id); open=false" class="w-full text-left px-4 py-3 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                    Hapus
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-6 flex-1">
+                        <h3 class="text-xl font-bold text-[var(--text-primary)] mb-2 line-clamp-2 leading-snug group-hover:text-[var(--primary)] transition-colors" x-text="project.title"></h3>
+                        <p class="text-sm text-[var(--text-secondary)] line-clamp-2 leading-relaxed" x-text="project.description || 'Tidak ada deskripsi.'"></p>
+                    </div>
+
+                    <div class="mt-auto pt-4 border-t border-[var(--border-light)] flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                                  :class="project.status === 'SELESAI' ? 'bg-green-soft' : (project.status === 'REVISI' ? 'bg-orange-soft' : 'bg-blue-soft')">
+                                <span x-text="project.status || 'DRAFT'"></span>
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-xs font-bold text-[var(--text-secondary)]">
+                            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                            <span x-text="formatDate(project.lastUpdated)"></span>
+                        </div>
+                    </div>
+
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-[var(--border-light)]">
+                        <div class="h-full bg-[var(--primary)] transition-all duration-500" 
+                             :style="`width: ${project.progress || 0}%`"></div>
+                    </div>
+
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div x-show="showModal" x-cloak 
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+         x-transition.opacity>
+         
+        <div class="modal-card w-full max-w-lg rounded-3xl relative flex flex-col max-h-[90vh]" @click.outside="closeModal()">
+            
+            <div class="px-8 py-6 border-b border-[var(--border-light)] flex justify-between items-center">
+                <h2 class="text-xl font-black text-[var(--text-primary)]" x-text="isEdit ? 'Edit Project' : 'New Project'"></h2>
+                <button @click="closeModal()" class="text-[var(--text-secondary)] hover:text-red-500"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+
+            <form @submit.prevent="saveProject" class="p-8 overflow-y-auto custom-scroll space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-[var(--text-secondary)] uppercase mb-2">Judul Skripsi</label>
+                    <input type="text" x-model="form.title" required class="input-ocean font-bold" placeholder="Masukkan judul...">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-[var(--text-secondary)] uppercase mb-2">Catatan</label>
+                    <textarea x-model="form.description" rows="3" class="input-ocean resize-none font-medium" placeholder="Deskripsi singkat..."></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-xs font-bold text-[var(--text-secondary)] uppercase mb-2">Deadline</label>
+                        <input x-ref="endDatePicker" type="text" class="input-ocean cursor-pointer" placeholder="Pilih tanggal">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-[var(--text-secondary)] uppercase mb-2">Status</label>
+                        <select x-model="form.status" class="input-ocean cursor-pointer">
+                            <option value="DRAFT">Draft</option>
+                            <option value="ON GOING">On Going</option>
+                            <option value="REVISI">Revisi</option>
+                            <option value="SELESAI">Selesai</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between mb-2">
+                        <label class="block text-xs font-bold text-[var(--text-secondary)] uppercase">Progress</label>
+                        <span class="text-xs font-bold text-[var(--primary)]" x-text="form.progress + '%'"></span>
+                    </div>
+                    <input type="range" x-model="form.progress" min="0" max="100" class="w-full h-2 bg-[var(--border-light)] rounded-lg appearance-none cursor-pointer accent-[var(--primary)]">
+                </div>
+            </form>
+
+            <div class="p-6 border-t border-[var(--border-light)] bg-black/5 dark:bg-white/5 rounded-b-3xl">
+                <button @click="saveProject()" class="w-full btn-vibrant justify-center py-3 text-sm shadow-lg" :disabled="isSaving">
+                    <span x-text="isSaving ? 'Menyimpan...' : 'Simpan Data'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('projectsApp', () => ({
+        loading: true, projects: [], filter: 'all', searchQuery: '',
+        showModal: false, isEdit: false, isSaving: false, currentId: null,
+        form: { title: '', description: '', status: 'DRAFT', progress: 0, endDate: '' },
+        db: null, auth: null, sdk: null,
+
+        initFirebase(detail) {
+            this.db = detail.db; this.auth = detail.auth; this.sdk = detail.sdk;
+            this.auth.onAuthStateChanged(user => { if(user) this.fetchProjects(user.uid); else window.location.href = '/login'; });
+        },
+
+        fetchProjects(uid) {
+            const { collection, query, where, onSnapshot } = this.sdk;
+            const q = query(collection(this.db, "projects"), where("userId", "==", uid));
+            onSnapshot(q, (snap) => {
+                const raw = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                this.projects = raw.sort((a,b) => (b.lastUpdated?.seconds||0) - (a.lastUpdated?.seconds||0));
+                this.loading = false;
+                this.$nextTick(() => lucide.createIcons());
+            }, (e) => { console.error(e); this.loading = false; });
+        },
+
+        get filteredProjects() {
+            let res = this.projects;
+            if(this.filter === 'active') res = res.filter(p => p.status === 'ON GOING' || p.status === 'REVISI');
+            if(this.filter === 'done') res = res.filter(p => p.status === 'SELESAI');
+            if(this.searchQuery) res = res.filter(p => p.title.toLowerCase().includes(this.searchQuery.toLowerCase()));
+            return res;
+        },
+
+        goToProject(id) { window.location.href = `/writing-assistant?project_id=${id}`; },
+
+        openModal(project = null) {
+            this.isEdit = !!project; this.showModal = true;
+            if(project) {
+                this.currentId = project.id;
+                this.form = { ...project, endDate: project.endDate?.toDate ? project.endDate.toDate() : new Date() };
+            } else {
+                this.currentId = null;
+                this.form = { title: '', description: '', status: 'DRAFT', progress: 0, endDate: new Date() };
+            }
+            this.$nextTick(() => {
+                if(this.$refs.endDatePicker) {
+                    flatpickr(this.$refs.endDatePicker, { 
+                        dateFormat: "Y-m-d", 
+                        defaultDate: this.form.endDate, 
+                        static: true, 
+                        theme: document.documentElement.classList.contains('dark') ? "dark" : "light",
+                        onChange: (d) => this.form.endDate = d[0] 
+                    });
+                }
+            });
+        },
+
+        closeModal() { this.showModal = false; },
+
+        async saveProject() {
+            if(!this.form.title) return;
+            this.isSaving = true;
+            const { collection, addDoc, doc, updateDoc, serverTimestamp, Timestamp } = this.sdk;
+            try {
+                const payload = {
+                    userId: this.auth.currentUser.uid,
+                    title: this.form.title,
+                    description: this.form.description,
+                    status: this.form.status,
+                    progress: parseInt(this.form.progress),
+                    endDate: this.form.endDate instanceof Date ? Timestamp.fromDate(this.form.endDate) : serverTimestamp(),
+                    lastUpdated: serverTimestamp()
+                };
+                if(this.isEdit) await updateDoc(doc(this.db, "projects", this.currentId), payload);
+                else { payload.createdAt = serverTimestamp(); await addDoc(collection(this.db, "projects"), payload); }
+                this.closeModal();
+            } catch(e) { console.error(e); } finally { this.isSaving = false; }
+        },
+
+        async deleteProject(id) {
+            if(confirm("Yakin ingin menghapus project ini?")) {
+                try { await this.sdk.deleteDoc(this.sdk.doc(this.db, "projects", id)); } catch(e) { console.error(e); }
+            }
+        },
+
+        formatDate(ts) {
+            if(!ts) return 'Baru saja';
+            const date = ts.toDate ? ts.toDate() : new Date(ts);
+            return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+        }
+    }));
+});
+</script>
+
+<script type="module">
+    import { db, auth } from "{{ url_for('static', filename='js/firebase.js') }}";
+    import * as FirestoreSDK from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    window.dispatchEvent(new CustomEvent('firebase-ready', { detail: { db, auth, sdk: FirestoreSDK } }));
+</script>
+{% endblock %}

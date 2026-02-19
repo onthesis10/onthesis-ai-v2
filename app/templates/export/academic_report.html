@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ data.meta.title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm 2cm;
+        }
+
+        body {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #000;
+            margin: 0;
+            padding: 0;
+        }
+
+        .main-title {
+            text-align: center;
+            font-size: 20pt;
+            font-weight: normal;
+            margin: 10px 0 25px 0;
+        }
+
+        .interpretation-box {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+        /* SPSS Style Table */
+        .spss-table-container {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+        }
+
+        .spss-title-row {
+            background-color: #0284c7;
+            color: white;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .spss-title-row th {
+            padding: 8px 12px;
+        }
+
+        .spss-header-row {
+            background-color: #0284c7;
+            color: white;
+            font-weight: bold;
+        }
+
+        .spss-header-row th {
+            padding: 6px 12px;
+            border: 1px solid #7dd3fc;
+        }
+
+        tbody td {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f3f4f6;
+        }
+
+        .cell-left-bold {
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .cell-center {
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1 class="main-title">Laporan {{ data.meta.title }}</h1>
+
+    <!-- Conclusion/Interpretation at Top -->
+    {% for section in data.sections %}
+    {% if section.type == 'paragraph' and section.source == 'Manual' %}
+    <div class="interpretation-box">
+        <strong>Interpretasi:</strong> {{ section.content }}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <!-- Table Section -->
+    {% for section in data.sections %}
+    {% if section.type == 'table' %}
+    <div class="spss-table-container">
+        <table>
+            <thead>
+                <tr class="spss-title-row">
+                    <th colspan="{{ section.content.headers|length }}" style="text-align: center;">{{ section.caption }}
+                    </th>
+                </tr>
+                <tr class="spss-header-row">
+                    {% for header in section.content.headers %}
+                    <th style="border: 1px solid white;">{{ header }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in section.content.rows %}
+                <tr>
+                    {% for cell in row %}
+                    <td class="{% if loop.index0 == 0 %}cell-left-bold{% else %}cell-center{% endif %}">
+                        {{ cell }}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <!-- AI Insight Section (Grouped) -->
+    {% set ns = namespace(has_ai=false) %}
+    {% for section in data.sections %}
+    {% if section.type == 'paragraph' and section.source == 'AI' %}
+    {% set ns.has_ai = true %}
+    {% endif %}
+    {% endfor %}
+
+    {% if ns.has_ai %}
+    <div style="margin: 25px 0 10px 0; border-top: 1px solid #0284c7; padding-top: 15px;">
+        <div
+            style="font-weight: bold; font-size: 13pt; color: #0284c7; margin-bottom: 10px; font-family: Arial, sans-serif;">
+            Analisis Insight (AI)</div>
+        {% for section in data.sections %}
+        {% if section.type == 'paragraph' and section.source == 'AI' %}
+        <p style="text-align: justify; margin-bottom: 10px;">{{ section.content }}</p>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</body>
+
+</html>

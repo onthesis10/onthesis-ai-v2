@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writing Studio Pro</title>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class', 
+            theme: {
+                extend: {
+                    colors: {
+                        // Mapping tailwind ke variabel CSS kita
+                        page: 'var(--bg-page)',
+                        card: 'var(--bg-card)',
+                        primary: 'var(--primary)',
+                        secondary: 'var(--text-secondary)'
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <script>
+        (function() {
+            try {
+                // Cek local storage atau preferensi sistem
+                var savedTheme = localStorage.getItem('theme');
+                var sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                
+                // Logic penentu dark mode
+                var isDark = savedTheme === 'dark' || (!savedTheme && sysDark);
+                
+                if (isDark) {
+                    document.documentElement.classList.add('dark');
+                    // Paksa warna background via JS biar instan (sesuai variabel Deep Bioluminescence)
+                    document.documentElement.style.backgroundColor = '#0B1120'; 
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.style.backgroundColor = '#F0F7FF'; // Happy Ocean Light
+                }
+            } catch (e) {}
+        })();
+    </script>
+
+    <style>
+        /* Reset Body agar Full Screen untuk React App */
+        body, html, #writing-studio-react-root { 
+            width: 100%; 
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; /* Scroll ditangani di dalam React */
+        }
+    </style>
+</head>
+
+<body class="antialiased selection:bg-blue-200 selection:text-blue-900">
+
+    <div id="writing-studio-react-root"></div>
+
+    <script>
+        window.initialState = {
+            projectId: "{{ project.id if project else '' }}",
+            isPro: "{{ 'true' if current_user.is_pro else 'false' }}" === "true",
+            endpoints: {
+                writingAssistant: "{{ url_for('assistant.api_writing_assistant') }}",
+                generateOutline: "{{ url_for('assistant.api_generate_outline') }}"
+            }
+        };
+    </script>
+    
+    <script type="module" src="{{ url_for('static', filename='js/dist/writing-studio-bundle.js') }}"></script>
+    
+</body>
+</html>

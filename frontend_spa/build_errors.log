@@ -1,0 +1,51 @@
+﻿[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32mΓ£ô[39m 4769 modules transformed.
+rendering chunks...
+npx : 
+[1m[33m[plugin:vite:reporter][39m[22m 
+[33m[plugin vite:reporter] 
+At line:1 char:18
++ cd frontend_spa; npx vite build 2>&1 | 
+Out-File -FilePath build_error ...
++                  ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified:  
+   ([1m[33m[plugi...vite:reporter] :Strin  
+  g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandE 
+   rror
+ 
+(!) C:/Users/LENOVO/Downloads/OnThesis-AI-mai
+n/OnThesis-AI-main/frontend_spa/node_modules/
+xlsx/xlsx.mjs is dynamically imported by C:/U
+sers/LENOVO/Downloads/OnThesis-AI-main/OnThes
+is-AI-main/frontend_spa/src/features/analysis
+/components/data/DataView.tsx but also 
+statically imported by C:/Users/LENOVO/Downlo
+ads/OnThesis-AI-main/OnThesis-AI-main/fronten
+d_spa/src/features/analysis/components/data/D
+ataView.tsx, dynamic import will not move 
+module into another chunk.
+[39m
+computing gzip size...
+[2m../app/static/js/dist/[22m[32mindex.html            [39m[1m[2m    1.12 kB[22m[1m[22m[2m Γöé gzip:     0.57 kB[22m
+[2m../app/static/js/dist/[22m[35mspa-style.css         [39m[1m[2m  127.86 kB[22m[1m[22m[2m Γöé gzip:    18.37 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-crown.js          [39m[1m[2m    0.32 kB[22m[1m[22m[2m Γöé gzip:     0.26 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-trending-up.js    [39m[1m[2m    0.64 kB[22m[1m[22m[2m Γöé gzip:     0.33 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-DashboardPage.js  [39m[1m[2m    7.61 kB[22m[1m[22m[2m Γöé gzip:     2.68 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-x-circle.js       [39m[1m[2m   12.16 kB[22m[1m[22m[2m Γöé gzip:     2.44 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-bundle.js         [39m[1m[2m  218.79 kB[22m[1m[22m[2m Γöé gzip:    71.62 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-routes2.js        [39m[1m[33m  669.22 kB[39m[22m[2m Γöé gzip:   198.47 kB[22m
+[2m../app/static/js/dist/[22m[36mspa-routes.js         [39m[1m[33m4,472.75 kB[39m[22m[2m Γöé gzip: 1,383.40 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after 
+minification. Consider:
+- Using dynamic import() to code-split the 
+application
+- Use 
+build.rollupOptions.output.manualChunks to 
+improve chunking: https://rollupjs.org/config
+uration-options/#output-manualchunks
+- Adjust chunk size limit for this warning 
+via build.chunkSizeWarningLimit.[39m
+[32mΓ£ô built in 1m 13s[39m

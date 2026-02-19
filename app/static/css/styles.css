@@ -1,0 +1,1253 @@
+/* app/static/css/styles.css */
+/* COSMIC GLASS DESIGN SYSTEM v3.0 */
+
+/* ===============================================
+   CSS VARIABLES - DEEP SPACE PALETTE
+   =============================================== */
+:root {
+    /* --- CORE PALETTE: OCEAN INTELLIGENCE --- */
+    --ocean-deep: #0B1622;
+    --ocean-dark: #111F2E;
+    --ocean-primary: #0E5E9C;
+    --ocean-vibrant: #00A8E8;
+    --ocean-light: #F5FBFF;
+
+    /* --- NEON ACCENTS (Dark Mode) --- */
+    --neon-blue: #00C2FF;
+    --neon-glow: rgba(0, 168, 232, 0.5);
+
+    /* --- HAPPY PALETTE --- */
+    --happy-coral: #FF9F9F;
+    --happy-mint: #2EC4B6;
+    --happy-lavender: #A78BFA;
+    --happy-cream: #FFFDF5;
+
+    /* --- DEFAULTS (Light Mode - Ocean Scholar) --- */
+    --bg-page: #F5FBFF;
+    --bg-card: #FFFFFF;
+    --bg-sidebar: #FFFFFF;
+
+    --text-primary: #0F172A;
+    --text-secondary: #64748B;
+    --text-muted: #94A3B8;
+
+    --border-light: rgba(0, 0, 0, 0.05);
+    --border-card: rgba(0, 0, 0, 0.05);
+
+    --shadow-card: 0px 10px 30px rgba(0, 90, 150, 0.08);
+    --shadow-hover: 0px 15px 40px rgba(0, 90, 150, 0.12);
+
+    --radius-card: 20px;
+    --radius-btn: 12px;
+
+    --grad-primary: linear-gradient(135deg, #0E5E9C 0%, #00A8E8 100%);
+    --grad-bg: linear-gradient(180deg, #F5FBFF 0%, #FFFFFF 50%, #EAF8FF 100%);
+
+    /* --- SIZING --- */
+    --radius-sm: 8px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --sidebar-width: 260px;
+    /* Fixed expanded width based on design */
+    --topbar-height: 80px;
+
+    /* --- ANIMATION --- */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- DARK MODE (Deep Research Lab) --- */
+html.dark {
+    --bg-page: #0B1622;
+    --bg-card: #111F2E;
+    --bg-sidebar: #0B1622;
+
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+
+    --border-light: rgba(0, 168, 232, 0.15);
+    --border-card: rgba(0, 168, 232, 0.15);
+
+    --shadow-card: 0px 20px 60px rgba(0, 0, 0, 0.4);
+    --shadow-hover: 0px 0px 25px rgba(0, 168, 232, 0.2);
+
+    /* Glows */
+    --glow-inner: inset 0 0 20px rgba(0, 168, 232, 0.05);
+    --grad-primary: linear-gradient(135deg, #00C2FF 0%, #0E5E9C 100%);
+    --grad-bg: radial-gradient(circle at 50% 0%, rgba(0, 168, 232, 0.08) 0%, transparent 70%), #0B1622;
+}
+
+/* --- HAPPY MODE (Creative Thesis Energy) --- */
+html.happy {
+    --bg-page: #FFFDF5;
+    --bg-card: rgba(255, 255, 255, 0.85);
+    /* Glassy Cream */
+    --bg-sidebar: rgba(255, 255, 255, 0.9);
+
+    --text-primary: #2D3748;
+    --text-secondary: #718096;
+
+    --border-light: transparent;
+    --border-card: transparent;
+
+    --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.08);
+    /* Softer Shadow */
+    --shadow-hover: 0 15px 50px rgba(0, 0, 0, 0.1);
+
+    --radius-card: 24px;
+    --radius-btn: 999px;
+    /* Pill shape */
+
+    --grad-primary: linear-gradient(90deg, #0E5E9C 0%, #00C2FF 50%, #2EC4B6 100%);
+
+    /* Complex Gradient Mesh for BG */
+    --grad-bg:
+        radial-gradient(circle at 10% 20%, rgba(14, 94, 156, 0.1), transparent 50%),
+        radial-gradient(circle at 90% 10%, rgba(255, 159, 159, 0.15), transparent 50%),
+        radial-gradient(circle at 50% 90%, rgba(46, 196, 182, 0.1), transparent 50%),
+        linear-gradient(180deg, #FFFDF5 0%, #F0F9FF 100%);
+}
+
+/* ===============================================
+   BASE RESET & TYPOGRAPHY
+   =============================================== */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: var(--grad-bg);
+    background-attachment: fixed;
+    /* Parallax feel */
+    background-size: cover;
+    color: var(--text-primary);
+    overflow-x: hidden;
+    min-height: 100vh;
+    transition: background 0.5s ease, color 0.3s ease;
+}
+
+/* Sub-pixel noise for Dark Mode */
+html.dark body::after {
+    content: "";
+    opacity: 0.03;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    z-index: 9999;
+    mix-blend-mode: overlay;
+}
+
+/* GLOBAL NE BULA BACKGROUND */
+body::before {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: -20%;
+    width: 140%;
+    height: 140%;
+    background:
+        radial-gradient(circle at 15% 50%, rgba(112, 0, 255, 0.08), transparent 40%),
+        radial-gradient(circle at 85% 30%, rgba(0, 240, 255, 0.08), transparent 40%),
+        radial-gradient(circle at 50% 90%, rgba(255, 0, 153, 0.05), transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(60px);
+}
+
+/* ===============================================
+   GLASSMORPHISM UTILITIES
+   =============================================== */
+.glass-panel {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-glass);
+    box-shadow: var(--shadow-card);
+}
+
+.glass-border-glow {
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.05), inset 0 0 10px rgba(0, 240, 255, 0.05);
+}
+
+/* ===============================================
+   APP SHELL
+   =============================================== */
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* --- SIDEBAR --- */
+.sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    background: rgba(11, 14, 20, 0.6);
+    /* Semi transparent */
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--border-glass);
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+    padding: 24px 16px;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px 32px 12px;
+}
+
+.logo-icon-glow {
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.4));
+}
+
+.logo-text {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, #fff, #b4b4b4);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s var(--ease-out-expo);
+    border: 1px solid transparent;
+}
+
+.nav-item:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.nav-item.active {
+    color: #fff;
+    background: linear-gradient(90deg, rgba(0, 240, 255, 0.1) 0%, transparent 100%);
+    border-left: 2px solid var(--neon-blue);
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.nav-item i {
+    width: 20px;
+    height: 20px;
+}
+
+/* --- MAIN CONTENT --- */
+/* --- MAIN CONTENT AREA --- */
+.main-content {
+    flex: 1;
+    margin-left: var(--sidebar-width-expanded);
+    /* Force expanded width */
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 40px;
+    /* Comfortable padding */
+}
+
+/* ===============================================
+   BENTO PREMUIM CARDS
+   =============================================== */
+.card-bento {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-card);
+    padding: 24px;
+    box-shadow: var(--shadow-card);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+
+    /* Dark Mode Inner Glow */
+    box-shadow: var(--shadow-card), var(--glow-inner, none);
+}
+
+.card-bento:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
+    border-color: rgba(0, 168, 232, 0.3);
+    /* Subtle blue hint on hover */
+}
+
+/* Happy Mode Special Card */
+html.happy .card-bento {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 253, 245, 0.8));
+    animation: float 6s ease-in-out infinite;
+    animation-play-state: paused;
+}
+
+html.happy .card-bento:hover {
+    animation-play-state: running;
+}
+
+@keyframes float {
+    0% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-3px);
+    }
+
+    100% {
+        transform: translateY(0px);
+    }
+}
+
+/* --- BUTTONS --- */
+.btn-vibrant {
+    background: var(--grad-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-btn);
+    padding: 12px 32px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(14, 94, 156, 0.3);
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-vibrant:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 25px rgba(14, 94, 156, 0.5);
+    filter: brightness(1.1);
+}
+
+/* Happy Mode Button - Pill Shape & Gradient */
+html.happy .btn-vibrant {
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0E5E9C, #00C2FF, #2EC4B6);
+    background-size: 200% 200%;
+    animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* ===============================================
+   BENTO GRID DASHBOARD
+   =============================================== */
+.bento-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    /* 4 Columns */
+    grid-template-rows: auto auto auto;
+    /* 3 Rows based on content */
+    gap: 24px;
+}
+
+/* Generic Card Styles for Bento */
+.cosmic-card {
+    background: rgba(18, 22, 28, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-glass);
+    border-radius: 24px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s var(--ease-out-expo), box-shadow 0.3s var(--ease-out-expo);
+}
+
+.cosmic-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Card Header */
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+.card-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* Specific Card Sizes */
+.col-span-2 {
+    grid-column: span 2;
+}
+
+.col-span-1 {
+    grid-column: span 1;
+}
+
+.row-span-2 {
+    grid-row: span 2;
+}
+
+/* --- COMPONENT: BUTTONS --- */
+.btn-glass {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-glass);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-glass:hover {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+}
+
+.btn-neon {
+    background: linear-gradient(90deg, rgba(0, 240, 255, 0.1), rgba(0, 240, 255, 0.05));
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    color: var(--neon-blue);
+    padding: 10px 24px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
+    transition: 0.2s;
+}
+
+.btn-neon:hover {
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    background: rgba(0, 240, 255, 0.15);
+}
+
+/* --- COMPONENT: INPUTS --- */
+.input-cosmic {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-glass);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 14px;
+    width: 100%;
+    outline: none;
+    font-size: 14px;
+    transition: 0.2s;
+}
+
+.input-cosmic:focus {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.2);
+}
+
+/* --- UTILS --- */
+.text-neon {
+    color: var(--neon-blue);
+    text-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
+}
+
+.text-purple {
+    color: var(--neon-purple);
+}
+
+.bg-neon-blue {
+    background: var(--neon-blue);
+}
+
+.glow-text {
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+/* RESPONSIVE */
+@media (max-width: 1200px) {
+    .bento-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .col-span-2 {
+        grid-column: span 2;
+    }
+
+    .col-span-1 {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        width: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    /* Mobile sidebar hidden by default */
+    .main-content {
+        margin-left: 0;
+        padding: 20px;
+    }
+
+    .bento-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .col-span-2 {
+        grid-column: span 1;
+    }
+}
+
+/* --- Removed Legacy Light Mode Block --- */
+
+/* --- DARK MODE (Deep Bioluminescence) --- */
+/* --- Removed Legacy Dark Mode Block (handled above) --- */
+
+/* ===============================================
+   BASE STYLES
+   =============================================== */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    transition: background-color var(--transition-slow), color var(--transition-normal);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Background pattern */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.06) 0%, transparent 50%),
+        radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* ===============================================
+   APP SHELL LAYOUT
+   =============================================== */
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* --- SIDEBAR --- */
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-light);
+    box-shadow: var(--shadow-sidebar);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    transition: width var(--transition-slow) cubic-bezier(0.34, 1.56, 0.64, 1);
+    overflow: hidden;
+}
+
+.sidebar.expanded {
+    width: var(--sidebar-width-expanded);
+}
+
+/* Sidebar Header (Logo) */
+.sidebar-header {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+}
+
+.sidebar.expanded .sidebar-header {
+    justify-content: flex-start;
+    padding-left: 20px;
+}
+
+.sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+}
+
+.sidebar-logo-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}
+
+.sidebar-logo-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    background: var(--grad-ocean);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    transition: opacity var(--transition-normal), width var(--transition-slow);
+}
+
+.sidebar.expanded .sidebar-logo-text {
+    opacity: 1;
+    width: auto;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+    flex: 1;
+    padding: 16px 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+    border-radius: 10px;
+}
+
+.sidebar-section {
+    margin-bottom: 24px;
+}
+
+.sidebar-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    padding: 0 8px;
+    margin-bottom: 8px;
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    transition: opacity var(--transition-normal), height var(--transition-normal);
+}
+
+.sidebar.expanded .sidebar-section-title {
+    opacity: 1;
+    height: auto;
+    margin-bottom: 8px;
+}
+
+/* Sidebar Item */
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    border-radius: 14px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+    position: relative;
+    margin-bottom: 4px;
+}
+
+.sidebar-item:hover {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary);
+}
+
+.sidebar-item.active {
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--primary);
+}
+
+.sidebar-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 24px;
+    background: var(--primary);
+    border-radius: 0 4px 4px 0;
+}
+
+.sidebar-item i,
+.sidebar-item svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.sidebar-item span {
+    white-space: nowrap;
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    transition: opacity var(--transition-normal), width var(--transition-slow);
+}
+
+.sidebar.expanded .sidebar-item span {
+    opacity: 1;
+    width: auto;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+    padding: 16px 12px;
+    border-top: 1px solid var(--border-light);
+    flex-shrink: 0;
+}
+
+/* Sidebar Toggle Button */
+.sidebar-toggle {
+    position: absolute;
+    top: 24px;
+    right: -14px;
+    width: 28px;
+    height: 28px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-fast);
+    z-index: 10;
+}
+
+.sidebar-toggle:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.sidebar-toggle i {
+    width: 16px;
+    height: 16px;
+    transition: transform var(--transition-normal);
+}
+
+.sidebar.expanded .sidebar-toggle i {
+    transform: rotate(180deg);
+}
+
+/* --- MAIN CONTENT AREA --- */
+.main-content {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    transition: margin-left var(--transition-slow) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sidebar.expanded~.main-content {
+    margin-left: var(--sidebar-width-expanded);
+}
+
+/* --- TOPBAR (Contextual) --- */
+.topbar {
+    height: var(--topbar-height);
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.topbar-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.topbar-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Topbar Actions */
+.topbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.topbar-btn:hover {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary);
+}
+
+.topbar-btn i {
+    width: 20px;
+    height: 20px;
+}
+
+/* User Menu in Topbar */
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 6px 6px;
+    border-radius: 50px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.user-menu:hover {
+    box-shadow: var(--shadow-sm);
+    border-color: var(--primary-soft);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary-soft);
+}
+
+.user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* --- PAGE CONTENT --- */
+.page-content {
+    flex: 1;
+    padding: 32px;
+    max-width: 1600px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.page-content.full-width {
+    max-width: none;
+    padding: 0;
+}
+
+/* ===============================================
+   BENTO CARDS
+   =============================================== */
+.card-bento {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl);
+    padding: 24px;
+    box-shadow: var(--shadow-card);
+    transition: all var(--transition-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.card-bento:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: var(--shadow-glow);
+    border-color: var(--primary-soft);
+}
+
+.card-bento.card-glass {
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+/* ===============================================
+   BUTTONS
+   =============================================== */
+.btn-vibrant {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--grad-ocean);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+    transition: all var(--transition-fast);
+}
+
+.btn-vibrant:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+}
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-secondary:hover {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: var(--primary-soft);
+    color: var(--primary);
+}
+
+/* ===============================================
+   ICON BOXES
+   =============================================== */
+.icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform var(--transition-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.card-bento:hover .icon-box {
+    transform: scale(1.1) rotate(-5deg);
+}
+
+/* Icon box colors */
+.bg-blue-soft {
+    background: #DBEAFE;
+    color: #2563EB;
+}
+
+.bg-purple-soft {
+    background: #EDE9FE;
+    color: #8B5CF6;
+}
+
+.bg-cyan-soft {
+    background: #CFFAFE;
+    color: #06B6D4;
+}
+
+.bg-green-soft {
+    background: #DCFCE7;
+    color: #16A34A;
+}
+
+.bg-orange-soft {
+    background: #FFEDD5;
+    color: #EA580C;
+}
+
+.bg-pink-soft {
+    background: #FCE7F3;
+    color: #DB2777;
+}
+
+html.dark .bg-blue-soft {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60A5FA;
+}
+
+html.dark .bg-purple-soft {
+    background: rgba(139, 92, 246, 0.15);
+    color: #A78BFA;
+}
+
+html.dark .bg-cyan-soft {
+    background: rgba(6, 182, 212, 0.15);
+    color: #22D3EE;
+}
+
+html.dark .bg-green-soft {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ADE80;
+}
+
+html.dark .bg-orange-soft {
+    background: rgba(249, 115, 22, 0.15);
+    color: #FB923C;
+}
+
+html.dark .bg-pink-soft {
+    background: rgba(236, 72, 153, 0.15);
+    color: #F472B6;
+}
+
+/* ===============================================
+   BENTO GRID
+   =============================================== */
+.bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 24px;
+}
+
+.bento-2 {
+    grid-column: span 2;
+}
+
+.bento-3 {
+    grid-column: span 3;
+}
+
+.bento-4 {
+    grid-column: span 4;
+}
+
+.bento-6 {
+    grid-column: span 6;
+}
+
+.bento-8 {
+    grid-column: span 8;
+}
+
+.bento-12 {
+    grid-column: span 12;
+}
+
+@media (max-width: 1200px) {
+    .bento-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+
+    .bento-2,
+    .bento-3 {
+        grid-column: span 3;
+    }
+
+    .bento-4,
+    .bento-6 {
+        grid-column: span 6;
+    }
+
+    .bento-8,
+    .bento-12 {
+        grid-column: span 6;
+    }
+}
+
+@media (max-width: 768px) {
+    .bento-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .bento-2,
+    .bento-3,
+    .bento-4,
+    .bento-6,
+    .bento-8,
+    .bento-12 {
+        grid-column: span 1;
+    }
+}
+
+/* ===============================================
+   INPUTS
+   =============================================== */
+.input-ocean {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    border-radius: 14px;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    width: 100%;
+    transition: all var(--transition-fast);
+}
+
+.input-ocean:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.input-ocean::placeholder {
+    color: var(--text-muted);
+}
+
+/* ===============================================
+   SCROLLBAR
+   =============================================== */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* ===============================================
+   GLASS NAVBAR (Legacy Support)
+   =============================================== */
+.nav-glass {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* ===============================================
+   TEXT UTILITIES
+   =============================================== */
+.text-gradient {
+    background: var(--grad-ocean);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* ===============================================
+   RESPONSIVE - MOBILE SIDEBAR
+   =============================================== */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        width: var(--sidebar-width-expanded);
+    }
+
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .sidebar.expanded .sidebar-toggle {
+        display: none;
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+    }
+
+    .page-content {
+        padding: 20px 16px;
+    }
+
+    .mobile-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+        opacity: 0;
+        visibility: hidden;
+        transition: all var(--transition-normal);
+    }
+
+    .mobile-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+}

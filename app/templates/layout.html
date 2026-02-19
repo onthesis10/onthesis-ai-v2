@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OnThesis{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Tailwind (Utility only) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+    {% block page_styles %}{% endblock %}
+</head>
+
+<body>
+    <div class="app-shell">
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="{{ url_for('main.dashboard') }}" class="sidebar-logo">
+                    <!-- Logo Icon (Placeholder or Image) -->
+                    <div
+                        class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30">
+                        O
+                    </div>
+                    <span class="sidebar-logo-text">OnThesis</span>
+                </a>
+                <button class="sidebar-toggle" id="sidebar-toggle">
+                    <i data-lucide="chevron-right"></i>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Main Menu</div>
+                    <a href="{{ url_for('main.dashboard') }}"
+                        class="sidebar-item {{ 'active' if request.endpoint == 'main.dashboard' else '' }}">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="{{ url_for('main.projects') }}"
+                        class="sidebar-item {{ 'active' if request.endpoint == 'main.projects' else '' }}">
+                        <i data-lucide="folder-open"></i>
+                        <span>Proyek Skripsi</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Research Tools</div>
+                    <a href="{{ url_for('assistant.writing_assistant') }}"
+                        class="sidebar-item {{ 'active' if 'assistant.' in request.endpoint else '' }}">
+                        <i data-lucide="pen-tool"></i>
+                        <span>Writing Studio</span>
+                    </a>
+                    <a href="{{ url_for('main.citation_management') }}"
+                        class="sidebar-item {{ 'active' if 'citation' in request.endpoint else '' }}">
+                        <i data-lucide="book-open"></i>
+                        <span>Citation Manager</span>
+                    </a>
+                    <a href="{{ url_for('analysis.data_analysis') }}"
+                        class="sidebar-item {{ 'active' if 'analysis.' in request.endpoint else '' }}">
+                        <i data-lucide="bar-chart-2"></i>
+                        <span>Data Analysis</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Support</div>
+                    <a href="{{ url_for('main.chat_ai') }}"
+                        class="sidebar-item {{ 'active' if 'chat' in request.endpoint else '' }}">
+                        <i data-lucide="message-circle"></i>
+                        <span>Curhat AI</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="{{ url_for('main.user_profile') }}"
+                    class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors">
+                    <img src="{{ current_user.picture or 'https://ui-avatars.com/api/?name=' + (current_user.username|urlencode) + '&background=0E5E9C&color=fff' }}"
+                        class="w-10 h-10 rounded-full border-2 border-white/10" alt="User">
+                    <div class="overflow-hidden">
+                        <p class="text-sm font-bold truncate text-[var(--text-primary)]">{{ current_user.username }}</p>
+                        <p class="text-xs text-[var(--text-secondary)] truncate">Free Plan</p>
+                    </div>
+                </a>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            <!-- TOPBAR (Minimalist) -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <h2 class="topbar-title">{% block page_title %}Dashboard{% endblock %}</h2>
+                </div>
+
+                <div class="topbar-right">
+                    <!-- 3-Mode Theme Toggler -->
+                    <button id="theme-toggle" class="topbar-btn" title="Ganti Tema (Light / Dark / Happy)">
+                        <span id="theme-icon">🌊</span>
+                    </button>
+
+                    <button class="topbar-btn">
+                        <i data-lucide="bell"></i>
+                    </button>
+
+                    <a href="{{ url_for('main.upgrade_page') }}" class="btn-vibrant text-xs py-2 px-4 rounded-full">
+                        Upgrade Pro
+                    </a>
+                </div>
+            </header>
+
+            <!-- CONTENT WRAPPER -->
+            <div class="flex-1 w-full max-w-[1600px] mx-auto animate-fade-in relative z-10 transition-all duration-300">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-6 space-y-2">
+                    {% for category, message in messages %}
+                    <div
+                        class="px-4 py-3 rounded-xl text-sm font-medium 
+                                            {{ 'bg-green-100 text-green-700' if category == 'success' else 'bg-red-100 text-red-700' }}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // --- 3-MODE THEME TOGGLER LOGIC ---
+        const themeBtn = document.getElementById('theme-toggle');
+        const themeIcon = document.getElementById('theme-icon');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+
+        // Modes: light -> dark -> happy -> light
+        const modes = ['light', 'dark', 'happy'];
+        const icons = {
+            'light': '🌊', // Ocean Scholar
+            'dark': '🌌',  // Deep Research
+            'happy': '🌈'  // Creative Energy
+        };
+
+        function setTheme(mode) {
+            document.documentElement.classList.remove('dark', 'happy');
+            if (mode === 'dark') document.documentElement.classList.add('dark');
+            if (mode === 'happy') document.documentElement.classList.add('happy');
+
+            localStorage.setItem('theme', mode);
+            if (themeIcon) themeIcon.textContent = icons[mode];
+        }
+
+        // Init Theme
+        let currentMode = localStorage.getItem('theme') || 'light';
+        if (!modes.includes(currentMode)) currentMode = 'light';
+        setTheme(currentMode);
+
+        // Toggle Event
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                let idx = modes.indexOf(currentMode);
+                idx = (idx + 1) % modes.length;
+                currentMode = modes[idx];
+                setTheme(currentMode);
+            });
+        }
+
+        // Sidebar Toggle
+        if (sidebarToggle && sidebar) {
+            // Restore state
+            const isExpanded = localStorage.getItem('sidebarExpanded') === 'true';
+            if (isExpanded) sidebar.classList.add('expanded');
+
+            sidebarToggle.addEventListener('click', () => {
+                sidebar.classList.toggle('expanded');
+                localStorage.setItem('sidebarExpanded', sidebar.classList.contains('expanded'));
+            });
+        }
+
+        // Init Lucide
+        lucide.createIcons();
+    </script>
+
+    {% block page_scripts %}{% endblock %}
+</body>
+
+</html>

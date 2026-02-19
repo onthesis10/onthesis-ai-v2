@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - OnThesis{% endblock %}
+
+{% block page_styles %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<style>
+    /* Custom Gradient Text */
+    .text-gradient {
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        background-image: var(--grad-ocean);
+    }
+    
+    /* Agar tag <a> berperilaku seperti block card */
+    a.card-bento {
+        display: flex;
+        text-decoration: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-10" x-data="dashboardApp" @firebase-ready.window="initFirebase($event.detail)">
+
+    <div class="relative">
+        <h1 class="text-4xl md:text-6xl font-black tracking-tight mb-4">
+            Hello, <span class="text-gradient">{{ current_user.username.split(' ')[0] }}!</span> 👋
+        </h1>
+        <p class="text-xl text-[var(--text-secondary)] font-medium max-w-2xl leading-relaxed">
+            Yuk, lanjutkan progres skripsimu. Hari ini adalah hari yang baik untuk <span class="text-blue-500 font-bold">menulis satu paragraf lagi!</span>
+        </p>
+        
+        <div class="mt-6 flex gap-4">
+            <a href="{{ url_for('main.projects') }}" class="btn-vibrant flex items-center gap-2 group">
+                <i data-lucide="plus" class="w-5 h-5 group-hover:rotate-90 transition-transform"></i>
+                Buat Proyek Baru
+            </a>
+            <a href="{{ url_for('main.chat_ai') }}" class="px-6 py-3 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-bold text-[var(--text-primary)] hover:bg-gray-50 transition-colors flex items-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4 text-purple-500"></i> Tanya AI
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <a href="{{ url_for('main.projects') }}" class="card-bento flex-col justify-between h-40 group">
+            <div class="flex justify-between items-start w-full">
+                <div class="icon-box bg-blue-soft">
+                    <i data-lucide="folder-heart" class="w-6 h-6"></i>
+                </div>
+                <div class="bg-blue-100 dark:bg-blue-900/30 text-blue-600 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
+                    Aktif
+                </div>
+            </div>
+            <div class="w-full">
+                <template x-if="loading"><div class="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div></template>
+                <template x-if="!loading"><h3 class="text-4xl font-black text-[var(--text-primary)]" x-text="stats.projects">0</h3></template>
+                <p class="text-sm font-bold text-[var(--text-secondary)]">Proyek Skripsi</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.citation_management') }}" class="card-bento flex-col justify-between h-40 group">
+             <div class="flex justify-between items-start w-full">
+                <div class="icon-box bg-cyan-soft">
+                    <i data-lucide="book-marked" class="w-6 h-6"></i>
+                </div>
+            </div>
+            <div class="w-full">
+                <template x-if="loading"><div class="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div></template>
+                <template x-if="!loading"><h3 class="text-4xl font-black text-[var(--text-primary)]" x-text="stats.references">0</h3></template>
+                <p class="text-sm font-bold text-[var(--text-secondary)]">Total Referensi</p>
+            </div>
+        </a>
+
+        <a href="{{ url_for('main.upgrade_page') }}" class="card-bento flex-col justify-between h-40 group relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-yellow-400/10 to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div class="flex justify-between items-start relative z-10 w-full">
+                <div class="icon-box bg-orange-soft">
+                    <i :data-lucide="stats.isPro ? 'crown' : 'coffee'" class="w-6 h-6"></i>
+                </div>
+                <i data-lucide="arrow-up-right" class="w-5 h-5 text-gray-400 group-hover:text-orange-500 transition-colors"></i>
+            </div>
+            <div class="relative z-10 w-full">
+                <template x-if="loading"><div class="h-8 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div></template>
+                <template x-if="!loading">
+                    <h3 class="text-2xl font-black text-[var(--text-primary)]" x-text="stats.isPro ? 'PRO MEMBER' : 'FREE PLAN'"></h3>
+                </template>
+                <p class="text-sm font-bold text-[var(--text-secondary)]" x-text="stats.isPro ? 'Semua fitur terbuka' : 'Upgrade untuk fitur AI'"></p>
+            </div>
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <div class="lg:col-span-2 card-bento min-h-[450px] flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h3 class="text-xl font-bold text-[var(--text-primary)]">Productivity Wave 🌊</h3>
+                    <p class="text-sm text-[var(--text-secondary)]">Aktivitas menulismu minggu ini.</p>
+                </div>
+            </div>
+            <div id="activityChart" class="flex-1 w-full"></div>
+        </div>
+
+        <div class="lg:col-span-1 space-y-6">
+            <div class="flex justify-between items-end">
+                <h3 class="text-xl font-bold">Quick Tools</h3>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4">
+                <a href="{{ url_for('assistant.writing_assistant') }}" class="card-bento p-5 flex items-center gap-5 hover:bg-white dark:hover:bg-gray-800 transition-all group border-l-4 border-l-transparent hover:border-l-purple-500">
+                    <div class="icon-box bg-purple-soft shrink-0 w-12 h-12">
+                        <i data-lucide="pen-tool" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-lg group-hover:text-purple-600 transition-colors">Writing Studio</h4>
+                        <p class="text-xs text-[var(--text-secondary)]">Co-pilot AI untuk bab skripsi.</p>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('analysis.data_analysis') }}" class="card-bento p-5 flex items-center gap-5 hover:bg-white dark:hover:bg-gray-800 transition-all group border-l-4 border-l-transparent hover:border-l-blue-500">
+                    <div class="icon-box bg-blue-soft shrink-0 w-12 h-12">
+                        <i data-lucide="pie-chart" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-lg group-hover:text-blue-600 transition-colors">Data Analysis</h4>
+                        <p class="text-xs text-[var(--text-secondary)]">Olah data kuesioner otomatis.</p>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('main.chat_ai') }}" class="card-bento p-5 flex items-center gap-5 hover:bg-white dark:hover:bg-gray-800 transition-all group border-l-4 border-l-transparent hover:border-l-green-500">
+                    <div class="icon-box bg-gradient-to-br from-green-400 to-emerald-600 text-white shrink-0 w-12 h-12 shadow-lg shadow-green-500/30">
+                        <i data-lucide="message-circle" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-lg group-hover:text-green-600 transition-colors">Curhat Skripsi</h4>
+                        <p class="text-xs text-[var(--text-secondary)]">Brainstorming ide bareng AI.</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('dashboardApp', () => ({
+            loading: true,
+            stats: { projects: 0, references: 0, isPro: false },
+            projects: [],
+            
+            init() { 
+                this.fetchStats(); 
+            },
+
+            async fetchStats() {
+                try {
+                    const res = await fetch('/api/dashboard-stats');
+                    if (res.ok) {
+                        const json = await res.json();
+                        this.stats = json.stats;
+                        
+                        // Validasi data chart
+                        const hasData = json.chart.data && json.chart.data.some(v => v > 0);
+                        const chartData = hasData ? json.chart.data : [10, 25, 45, 30, 60, 75, 50];
+                        const chartLabels = json.chart.labels.length ? json.chart.labels : ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+                        
+                        this.renderChart(chartLabels, chartData);
+                    }
+                } catch (e) {
+                    console.error("Stats Error:", e);
+                    // Fallback chart jika error
+                    this.renderChart(['S', 'S', 'R', 'K', 'J', 'S', 'M'], [0,0,0,0,0,0,0]);
+                }
+            },
+
+            // --- LOGIKA FIREBASE ASLI (DIKEMBALIKAN UTUH) ---
+            initFirebase(detail) {
+                const { db, auth, sdk } = detail;
+                auth.onAuthStateChanged(user => {
+                    if (user) {
+                        this.setupListeners(user.uid, db, sdk);
+                    } else {
+                        this.loading = false; // Stop loading jika user belum login/redirect
+                    }
+                });
+            },
+
+            setupListeners(uid, db, sdk) {
+                const { collection, query, where, onSnapshot, orderBy, limit } = sdk;
+                
+                // Query Utama: Ambil Project user
+                const qProjects = query(collection(db, "projects"), where("userId", "==", uid), orderBy("lastUpdated", "desc"), limit(4));
+                
+                try {
+                    onSnapshot(qProjects, (snap) => {
+                        this.projects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        
+                        // Update stats project jika API backend lambat
+                        if(this.stats.projects === 0) {
+                            this.stats.projects = snap.size; 
+                        }
+                        
+                        this.loading = false;
+                        this.$nextTick(() => lucide.createIcons());
+                    }, (err) => {
+                        console.warn("Firestore Index Error (Fallback Mode):", err);
+                        // Fallback jika index belum dibuat di Firebase Console
+                        const qFallback = query(collection(db, "projects"), where("userId", "==", uid), limit(4));
+                        onSnapshot(qFallback, (snap) => {
+                            this.projects = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                             if(this.stats.projects === 0) {
+                                this.stats.projects = snap.size;
+                            }
+                            this.loading = false;
+                            this.$nextTick(() => lucide.createIcons());
+                        });
+                    });
+                } catch(e) { 
+                    console.error("Firestore Error:", e);
+                    this.loading = false; 
+                }
+            },
+
+            renderChart(labels, data) {
+                // Konfigurasi Chart "Happy Ocean"
+                const options = {
+                    series: [{ name: 'Fokus', data: data }],
+                    chart: { 
+                        type: 'area', 
+                        height: 350, 
+                        toolbar: { show: false }, 
+                        fontFamily: 'Plus Jakarta Sans, sans-serif',
+                        zoom: { enabled: false },
+                        background: 'transparent'
+                    },
+                    colors: ['#007AFF'], // Vibrant Blue
+                    fill: {
+                        type: 'gradient',
+                        gradient: { 
+                            shadeIntensity: 1, 
+                            opacityFrom: 0.6, 
+                            opacityTo: 0.1, 
+                            stops: [0, 100] 
+                        }
+                    },
+                    dataLabels: { enabled: false },
+                    stroke: { curve: 'smooth', width: 4, lineCap: 'round' },
+                    xaxis: { 
+                        categories: labels, 
+                        axisBorder: { show: false }, 
+                        axisTicks: { show: false },
+                        labels: { style: { colors: 'var(--text-secondary)' } } 
+                    },
+                    yaxis: { show: false },
+                    grid: { 
+                        show: true, 
+                        strokeDashArray: 5, 
+                        borderColor: 'rgba(128,128,128,0.1)' 
+                    },
+                    tooltip: { 
+                        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+                        style: { fontSize: '14px' },
+                        x: { show: false },
+                        marker: { show: false }
+                    }
+                };
+                
+                const el = document.querySelector("#activityChart");
+                if(el) { 
+                    el.innerHTML = ''; 
+                    new ApexCharts(el, options).render(); 
+                }
+            }
+        }));
+    });
+</script>
+
+<script type="module">
+    import { db, auth } from "{{ url_for('static', filename='js/firebase.js') }}";
+    import * as FirestoreSDK from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    // Trigger event agar Alpine bisa menangkap instance Firebase
+    window.dispatchEvent(new CustomEvent('firebase-ready', { detail: { db, auth, sdk: FirestoreSDK } }));
+</script>
+{% endblock %}

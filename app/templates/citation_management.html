@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+
+{% block title %}Citation Manager - OnThesis{% endblock %}
+
+{% block page_styles %}
+<style>
+    /* --- 1. LAYOUT RESET & BASE --- */
+    main { 
+        padding: 0 !important; 
+        overflow: hidden !important; 
+        height: 100vh;
+        background-color: var(--bg-page);
+    }
+    
+    .citation-layout {
+        height: 100%;
+        display: flex;
+        max-width: 1920px;
+        margin: 0 auto;
+        /* Garis pemisah vertikal sangat halus */
+        background: linear-gradient(90deg, transparent 279px, var(--border-light) 280px, transparent 281px);
+    }
+
+    /* SCROLLBAR HALUS & MINIMALIS */
+    .custom-scroll { 
+        overflow-y: auto; 
+        scrollbar-gutter: stable; 
+        padding-right: 4px; 
+    }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background-color: var(--border-light); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+
+    /* --- 2. SIDEBAR (MINIMALIST COMPACT) --- */
+    .project-sidebar {
+        width: 280px; /* Lebih ramping */
+        display: flex; flex-direction: column;
+        background-color: var(--bg-page);
+        flex-shrink: 0;
+        padding-top: 1.5rem;
+    }
+
+    .project-item {
+        padding: 0.5rem 1rem;
+        margin: 0.125rem 0.75rem;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: all 0.15s ease;
+        border: 1px solid transparent;
+    }
+    .project-item:hover {
+        background-color: var(--bg-input);
+        color: var(--text-primary);
+    }
+    .project-item.active {
+        background-color: var(--bg-input);
+        color: var(--text-primary);
+        font-weight: 700;
+        border-color: var(--border-light);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    
+    .count-badge {
+        font-size: 10px; opacity: 0.6; font-weight: normal;
+        background: var(--bg-card); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-light);
+    }
+
+    /* --- 3. MAIN AREA (CLEAN ACADEMIC STYLE) --- */
+    .reference-area {
+        flex: 1; display: flex; flex-direction: column;
+        background-color: var(--bg-page);
+        min-width: 0;
+        padding-left: 1.5rem; /* Jarak dari garis separator */
+    }
+
+    /* Reference Header (Table-like, Clean) */
+    .ref-header {
+        display: grid;
+        grid-template-columns: 2.5rem 4fr 2fr 1fr 3rem; /* Icon | Detail | Source | Year | Menu */
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid var(--border-strong);
+        font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--text-secondary);
+        background-color: var(--bg-page);
+        align-items: center;
+    }
+
+    /* Reference Row (Compact & Readable) */
+    .ref-row {
+        display: grid;
+        grid-template-columns: 2.5rem 4fr 2fr 1fr 3rem;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border-light);
+        align-items: flex-start;
+        transition: background-color 0.15s;
+        cursor: default;
+    }
+    .ref-row:hover { background-color: var(--bg-input); }
+    .ref-row:last-child { border-bottom: none; }
+
+    /* Metadata Typography */
+    .ref-title { font-weight: 700; color: var(--text-primary); font-size: 0.9rem; line-height: 1.4; margin-bottom: 0.2rem; }
+    .ref-author { font-size: 0.8rem; color: var(--text-secondary); font-style: italic; }
+    .ref-meta { font-size: 0.75rem; color: var(--text-secondary); font-family: -apple-system, system-ui, sans-serif; }
+
+    /* --- 4. COMPONENTS & UTILS --- */
+    
+    /* Action Buttons */
+    .btn-icon {
+        width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+        border-radius: 6px; color: var(--text-secondary); transition: all 0.2s;
+    }
+    .btn-icon:hover { background-color: var(--bg-input); color: var(--text-primary); }
+
+    /* Custom Select (Clean) */
+    .select-clean {
+        appearance: none; background: transparent; border: none; outline: none;
+        font-size: 11px; font-weight: 700; color: var(--text-primary); cursor: pointer;
+        padding-right: 1rem; text-transform: uppercase;
+    }
+    
+    /* Search Input (Integrated) */
+    .input-search {
+        background: var(--bg-input); border: 1px solid transparent;
+        border-radius: 8px; padding: 0.5rem 1rem 0.5rem 2.5rem;
+        font-size: 0.85rem; width: 240px; transition: all 0.2s;
+        color: var(--text-primary); outline: none;
+    }
+    .input-search:focus { border-color: var(--border-strong); width: 280px; background: var(--bg-page); }
+
+    /* Modal Backdrop */
+    .backdrop-blur-heavy { backdrop-filter: blur(8px); background-color: rgba(0,0,0,0.5); }
+    html.light .backdrop-blur-heavy { background-color: rgba(255,255,255,0.7); }
+    
+    /* Source Tag (Search Modal) */
+    .source-tag {
+        font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+        padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-light);
+        color: var(--text-secondary); cursor: pointer; transition: all 0.2s;
+    }
+    .source-tag:hover { color: var(--text-primary); border-color: var(--text-primary); }
+    .source-tag.active { background: var(--text-primary); color: var(--bg-page); border-color: var(--text-primary); }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+{% endblock %}
+
+{% block content_wrapper %}
+<div class="citation-layout">
+    
+    <div class="project-sidebar">
+        <div class="px-4 mb-4 flex justify-between items-center">
+            <h2 class="text-xs font-bold text-text-secondary uppercase tracking-wider">My Library</h2>
+            <button id="add-project-btn" class="p-1.5 rounded hover:bg-bg-input text-text-primary transition-colors" title="New Project">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+            </button>
+        </div>
+        
+        <div id="project-list" class="flex-1 custom-scroll px-1 pb-4">
+            <div class="px-4 space-y-2 animate-pulse">
+                <div class="h-8 bg-bg-input rounded"></div>
+                <div class="h-8 bg-bg-input rounded"></div>
+            </div>
+        </div>
+        
+        <div class="px-5 py-4 border-t border-border-light mt-auto">
+            <div class="flex justify-between items-center text-[10px] text-text-secondary font-bold uppercase tracking-wider">
+                <span>Total References</span>
+                <span id="total-ref-count">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="reference-area pt-6 pr-6">
+        
+        <div class="flex justify-between items-start mb-6 px-6 shrink-0">
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <div class="p-1.5 rounded bg-bg-input text-text-primary">
+                        <i data-lucide="folder-open" class="w-4 h-4"></i>
+                    </div>
+                    <h1 class="text-2xl font-bold text-text-primary tracking-tight" id="active-project-title">Select Project</h1>
+                </div>
+                <p class="text-xs text-text-secondary pl-9" id="ref-status">Manage your citations and sources.</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="relative group">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 w-3.5 h-3.5 text-text-secondary group-focus-within:text-text-primary"></i>
+                    <input type="text" id="local-search" placeholder="Filter references..." class="input-search">
+                </div>
+                <button id="open-search-modal-btn" class="btn-primary text-xs px-4 py-2 h-[34px] rounded-lg shadow-sm border border-transparent hover:border-text-primary">
+                    <i data-lucide="globe" class="w-3.5 h-3.5"></i> Add Online
+                </button>
+                <button id="add-reference-btn" class="h-[34px] px-3 rounded-lg border border-border-light hover:bg-bg-input text-text-primary transition-colors flex items-center gap-2 text-xs font-bold">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Manual
+                </button>
+                <button id="upload-doc-btn" class="h-[34px] px-3 rounded-lg border border-border-light hover:bg-bg-input text-text-primary transition-colors flex items-center gap-2 text-xs font-bold">
+                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i> PDF
+                </button>
+                <input type="file" id="doc-file-input" class="hidden" accept=".pdf,.docx">
+            </div>
+        </div>
+
+        <div class="flex justify-between items-center px-6 pb-4 shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-text-secondary uppercase">Format:</span>
+                <div class="relative flex items-center">
+                    <select id="citation-style-select" class="select-clean">
+                        <option value="apa">APA 7th</option>
+                        <option value="mla">MLA 9th</option>
+                        <option value="chicago">Chicago</option>
+                        <option value="ieee">IEEE</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-3 h-3 text-text-secondary absolute right-0 pointer-events-none"></i>
+                </div>
+            </div>
+            
+            <button id="export-references-btn" class="text-[10px] font-bold uppercase text-text-secondary hover:text-text-primary flex items-center gap-1.5 transition-colors disabled:opacity-30">
+                <i data-lucide="download" class="w-3 h-3"></i> Export RIS
+            </button>
+        </div>
+
+        <div class="ref-header mx-6 rounded-t-lg border border-border-light border-b-0">
+            <div>Type</div>
+            <div>Reference Details</div>
+            <div>Publisher</div>
+            <div>Year</div>
+            <div class="text-right">Action</div>
+        </div>
+
+        <div id="references-list" class="flex-1 custom-scroll mx-6 border-x border-b border-border-light rounded-b-lg mb-8 bg-bg-card">
+            <div class="h-64 flex flex-col items-center justify-center text-text-secondary opacity-50">
+                <i data-lucide="library" class="w-8 h-8 mb-3 stroke-1"></i>
+                <p class="text-xs font-medium">Select a project to view references.</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="search-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-heavy hidden transition-opacity">
+    <div class="w-full max-w-5xl bg-bg-page border border-border-strong rounded-xl shadow-2xl flex flex-col h-[85vh] overflow-hidden">
+        
+        <div class="px-6 py-4 border-b border-border-light flex justify-between items-center bg-bg-input/30 shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-text-primary flex items-center gap-2">
+                    <i data-lucide="globe" class="w-4 h-4"></i> Global Database Search
+                </h3>
+            </div>
+            <button id="close-search-modal-btn" class="p-1.5 hover:bg-bg-input rounded-md text-text-primary"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        
+        <div class="p-6 bg-bg-page border-b border-border-light shrink-0 space-y-4">
+            <div class="flex gap-3">
+                <input type="text" id="search-modal-query" placeholder="Type title, author, DOI, or keywords..." class="flex-1 bg-bg-input border border-border-light rounded-lg px-4 py-2.5 text-sm font-medium outline-none focus:border-text-primary text-text-primary transition-colors">
+                <button id="search-modal-btn" class="btn-primary px-6 rounded-lg text-xs font-bold uppercase tracking-wide">
+                    <span class="btn-text">Search</span>
+                    <div class="spinner hidden w-4 h-4 border-2 border-bg-page border-t-transparent rounded-full animate-spin"></div>
+                </button>
+            </div>
+            
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div class="flex flex-wrap gap-2 items-center" id="search-modal-source">
+                    <span class="text-[10px] font-bold text-text-secondary uppercase mr-1">Sources:</span>
+                    <button class="source-tag active" data-source="crossref">Crossref</button>
+                    <button class="source-tag active" data-source="doaj">DOAJ</button>
+                    <button class="source-tag active" data-source="openalex">OpenAlex</button>
+                    <button class="source-tag" data-source="core">CORE</button>
+                    <button class="source-tag" data-source="eric">ERIC</button>
+                    <button class="source-tag" data-source="pubmed">PubMed</button>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-text-secondary uppercase">Year:</span>
+                    <div class="relative">
+                        <select id="search-modal-year" class="select-clean bg-bg-input px-2 py-1 rounded text-[10px]">
+                            <option value="">All Years</option>
+                        </select>
+                        <i data-lucide="chevron-down" class="w-3 h-3 text-text-secondary absolute right-0 top-1 pointer-events-none"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="search-results-container" class="flex-1 overflow-y-auto custom-scroll bg-bg-page p-6 space-y-4">
+            <div id="search-initial-message" class="text-center py-20 text-text-secondary opacity-50">
+                <i data-lucide="search-code" class="w-10 h-10 mx-auto mb-2 stroke-1"></i>
+                <p class="text-xs">Enter a query to begin searching academic databases.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="project-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-heavy hidden">
+    <div class="w-full max-w-sm bg-bg-page border border-border-strong rounded-xl shadow-2xl p-6 relative">
+        <button id="cancel-project-btn" class="absolute top-4 right-4 text-text-secondary hover:text-text-primary"><i data-lucide="x" class="w-4 h-4"></i></button>
+        <h3 class="text-lg font-bold mb-4">New Project</h3>
+        <form id="project-form">
+            <input type="hidden" id="project-id-input">
+            <label class="text-[10px] font-bold text-text-secondary uppercase mb-1 block">Title</label>
+            <input type="text" id="project-title-input" class="w-full bg-bg-input border border-border-light rounded-lg px-3 py-2 text-sm font-medium outline-none focus:border-text-primary mb-6" placeholder="e.g. Chapter 1" required>
+            <button type="submit" class="w-full btn-primary py-2.5 text-xs font-bold uppercase rounded-lg">Create</button>
+        </form>
+    </div>
+</div>
+
+<div id="reference-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-heavy hidden">
+    <div class="w-full max-w-md bg-bg-page border border-border-strong rounded-xl shadow-2xl p-6 relative">
+        <button id="cancel-reference-x-btn" class="absolute top-4 right-4 text-text-secondary hover:text-text-primary"><i data-lucide="x" class="w-4 h-4"></i></button>
+        <h3 id="reference-modal-title" class="text-lg font-bold mb-6">Add Reference</h3>
+        <form id="reference-form" class="space-y-4">
+            <input type="hidden" id="reference-id">
+            <div>
+                <label class="text-[10px] font-bold text-text-secondary uppercase mb-1 block">Title</label>
+                <input type="text" name="title" class="w-full bg-bg-input border border-border-light rounded-lg px-3 py-2 text-sm outline-none focus:border-text-primary" required>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] font-bold text-text-secondary uppercase mb-1 block">Author</label>
+                    <input type="text" name="author" class="w-full bg-bg-input border border-border-light rounded-lg px-3 py-2 text-sm outline-none focus:border-text-primary" placeholder="Doe, J." required>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-text-secondary uppercase mb-1 block">Year</label>
+                    <input type="number" name="year" class="w-full bg-bg-input border border-border-light rounded-lg px-3 py-2 text-sm outline-none focus:border-text-primary" required>
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-text-secondary uppercase mb-1 block">Publisher / Journal</label>
+                <input type="text" name="journal" class="w-full bg-bg-input border border-border-light rounded-lg px-3 py-2 text-sm outline-none focus:border-text-primary">
+            </div>
+            <div class="pt-2 flex justify-end gap-3">
+                <button type="button" id="cancel-reference-btn" class="text-xs font-bold uppercase text-text-secondary hover:text-text-primary">Cancel</button>
+                <button type="submit" class="btn-primary px-5 py-2 text-xs font-bold rounded-lg uppercase">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="confirm-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-heavy hidden">
+    <div class="w-full max-w-xs bg-bg-page border border-border-strong p-6 text-center shadow-2xl rounded-xl">
+        <h3 class="text-lg font-bold mb-2">Delete Item?</h3>
+        <p class="text-xs text-text-secondary mb-6">This action cannot be undone.</p>
+        <div class="flex gap-3 justify-center">
+            <button id="cancel-confirm-btn" class="px-4 py-2 rounded-lg border border-border-light text-xs font-bold hover:bg-bg-input">Cancel</button>
+            <button id="confirm-delete-btn" class="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700">Delete</button>
+        </div>
+    </div>
+</div>
+
+<div id="notification-container" class="fixed bottom-6 right-6 z-[1001] flex flex-col gap-2 w-72 pointer-events-none"></div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script type="module">
+    import { db, auth } from "{{ url_for('static', filename='js/firebase.js') }}";
+    import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    document.addEventListener('DOMContentLoaded', () => {
+        let currentUserId = null;
+        let activeProjectId = null;
+        let allReferences = [];
+        let allProjects = [];
+
+        // DOM Elements
+        const els = {
+            projectList: document.getElementById('project-list'),
+            refsList: document.getElementById('references-list'),
+            activeTitle: document.getElementById('active-project-title'),
+            totalRef: document.getElementById('total-ref-count'),
+            styleSelect: document.getElementById('citation-style-select'),
+            searchModal: document.getElementById('search-modal'),
+            searchQuery: document.getElementById('search-modal-query'),
+            searchBtn: document.getElementById('search-modal-btn'),
+            searchResults: document.getElementById('search-results-container'),
+            searchYear: document.getElementById('search-modal-year'),
+            openSearchBtn: document.getElementById('open-search-modal-btn'),
+            uploadDocBtn: document.getElementById('upload-doc-btn'),
+            docInput: document.getElementById('doc-file-input'),
+            exportBtn: document.getElementById('export-references-btn'),
+            localSearch: document.getElementById('local-search')
+        };
+
+        // Init Year
+        const currentYear = new Date().getFullYear();
+        for(let y = currentYear; y >= 2000; y--) {
+            const opt = document.createElement('option');
+            opt.value = y; opt.textContent = y;
+            els.searchYear.appendChild(opt);
+        }
+
+        // 1. AUTH & SYNC
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUserId = user.uid;
+                
+                // Projects
+                const qProjects = query(collection(db, "projects"), where("userId", "==", currentUserId));
+                onSnapshot(qProjects, snap => {
+                    allProjects = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
+                    
+                    if (!activeProjectId && allProjects.length > 0) {
+                        selectProject(allProjects[0].id);
+                    } else if (activeProjectId && !allProjects.find(p => p.id === activeProjectId)) {
+                        activeProjectId = null; els.activeTitle.innerText = "Select Project"; renderProjects(); renderReferences(null);
+                    } else {
+                        renderProjects();
+                    }
+                });
+
+                // References
+                const qRefs = query(collection(db, "citations"), where("userId", "==", currentUserId));
+                onSnapshot(qRefs, snap => {
+                    allReferences = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                    els.totalRef.innerText = allReferences.length;
+                    if(activeProjectId) renderReferences(activeProjectId);
+                });
+            } else window.location.href = '/login';
+        });
+
+        // 2. LOGIC
+        function selectProject(id) {
+            activeProjectId = id;
+            const p = allProjects.find(x => x.id === id);
+            if(p) els.activeTitle.innerText = p.title;
+            renderProjects(); renderReferences(id);
+        }
+        window.selectProject = selectProject;
+
+        function renderProjects() {
+            if(allProjects.length === 0) {
+                els.projectList.innerHTML = `<div class="px-4 text-xs text-text-secondary opacity-50">No projects.</div>`; return;
+            }
+            els.projectList.innerHTML = allProjects.map(p => {
+                const isActive = p.id === activeProjectId;
+                const count = allReferences.filter(r => r.projectId === p.id).length;
+                return `
+                <div class="project-item group ${isActive ? 'active' : ''}" onclick="window.selectProject('${p.id}')">
+                    <span class="truncate pr-2">${p.title}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="count-badge">${count}</span>
+                        <button class="delete-project-btn p-1 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Delete"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function renderReferences(projectId) {
+            if(!projectId) { els.refsList.innerHTML = ''; return; }
+            
+            let refs = allReferences.filter(r => r.projectId === projectId);
+            
+            // Local Filter
+            const filterText = els.localSearch.value.toLowerCase();
+            if(filterText) {
+                refs = refs.filter(r => r.title.toLowerCase().includes(filterText) || r.author.toLowerCase().includes(filterText));
+            }
+
+            if(refs.length === 0) {
+                els.refsList.innerHTML = `
+                    <div class="h-64 flex flex-col items-center justify-center text-text-secondary opacity-40">
+                        <i data-lucide="folder-open" class="w-8 h-8 mb-3 stroke-1"></i>
+                        <p class="text-xs font-mono-tech">EMPTY LIST</p>
+                    </div>`;
+                lucide.createIcons();
+                return;
+            }
+
+            const style = els.styleSelect.value;
+            els.refsList.innerHTML = refs.map(ref => `
+                <div class="ref-row group">
+                    <div class="w-8 h-8 rounded-lg bg-bg-input flex items-center justify-center text-text-primary border border-border-light">
+                        <i data-lucide="quote" class="w-3.5 h-3.5 opacity-50"></i>
+                    </div>
+                    <div class="pr-4">
+                        <div class="ref-title">${ref.title}</div>
+                        <div class="ref-author">${ref.author}</div>
+                        <div class="text-[9px] font-bold text-text-secondary mt-1 uppercase tracking-wider opacity-60">${style} FORMAT</div>
+                    </div>
+                    <div class="ref-meta truncate pt-1">${ref.journal || '-'}</div>
+                    <div class="text-xs font-bold text-text-primary font-mono-tech pt-1">${ref.year || 'N/A'}</div>
+                    <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button class="copy-btn p-1.5 hover:bg-bg-input rounded-md text-text-primary" data-id="${ref.id}"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+                        <button class="delete-ref-btn p-1.5 hover:bg-bg-input rounded-md text-red-500" data-id="${ref.id}"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // Local Search
+        els.localSearch.addEventListener('input', () => renderReferences(activeProjectId));
+
+        // Delete & Copy Logic
+        els.projectList.addEventListener('click', e => {
+            const btn = e.target.closest('.delete-project-btn');
+            if(btn) {
+                e.stopPropagation();
+                const id = btn.closest('.project-item').getAttribute('onclick').match(/'([^']+)'/)[1];
+                document.getElementById('confirm-delete-btn').onclick = async () => {
+                    const batch = writeBatch(db);
+                    const refs = allReferences.filter(r => r.projectId === id);
+                    refs.forEach(r => batch.delete(doc(db,"citations",r.id)));
+                    batch.delete(doc(db,"projects",id));
+                    await batch.commit(); toggleModal('confirm-modal',false); showNotif("Project Deleted");
+                };
+                toggleModal('confirm-modal', true);
+            }
+        });
+
+        els.refsList.addEventListener('click', e => {
+            const btn = e.target.closest('button'); if(!btn) return;
+            const id = btn.dataset.id;
+            if(btn.classList.contains('delete-ref-btn')) {
+                document.getElementById('confirm-delete-btn').onclick = async () => {
+                    await deleteDoc(doc(db,"citations",id)); toggleModal('confirm-modal',false); showNotif("Deleted");
+                }; toggleModal('confirm-modal',true);
+            }
+            if(btn.classList.contains('copy-btn')) {
+                const r = allReferences.find(x => x.id === id);
+                navigator.clipboard.writeText(`${r.author} (${r.year}). ${r.title}.`); showNotif("Copied!");
+            }
+        });
+
+        // Search API (Info Rich)
+        els.searchBtn.addEventListener('click', async () => {
+            const q = els.searchQuery.value; if(!q) return showNotif("Type something!",'error');
+            const sources = Array.from(document.querySelectorAll('.source-tag.active')).map(b => b.dataset.source);
+            
+            const btnText = els.searchBtn.querySelector('.btn-text'); const spin = els.searchBtn.querySelector('.spinner');
+            btnText.classList.add('hidden'); spin.classList.remove('hidden'); els.searchBtn.disabled = true;
+            els.searchResults.innerHTML = `<div class="py-10 flex justify-center"><i data-lucide="loader-2" class="animate-spin w-6 h-6 text-text-primary"></i></div>`; lucide.createIcons();
+
+            try {
+                const res = await fetch('/api/unified-search-references', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ query: q, sources: sources, year: els.searchYear.value })
+                });
+                const data = await res.json();
+                if(data.results && data.results.length > 0) {
+                    els.searchResults.innerHTML = data.results.map(r => {
+                        const doiBadge = r.doi ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-bg-input text-[9px] font-mono text-text-secondary border border-border-light hover:text-text-primary hover:border-text-primary transition-colors"><a href="https://doi.org/${r.doi}" target="_blank">DOI</a></span>` : '';
+                        const pdfBtn = r.pdfUrl ? `<a href="${r.pdfUrl}" target="_blank" class="w-8 h-8 rounded-lg border border-red-200 text-red-500 flex items-center justify-center hover:bg-red-50 transition-colors" title="PDF"><i data-lucide="file-text" class="w-4 h-4"></i></a>` : '';
+                        
+                        return `
+                        <div class="search-result-detailed group p-4 border-b border-border-light flex gap-4 items-start hover:bg-bg-input transition-colors">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <a href="${r.doi ? 'https://doi.org/'+r.doi : '#'}" target="_blank" class="font-bold text-sm text-text-primary hover:underline">${r.title}</a>
+                                    ${doiBadge}
+                                </div>
+                                <p class="text-xs text-text-secondary mb-2 font-mono-tech">${r.author} • ${r.year} • <span class="italic">${r.journal || 'Journal'}</span></p>
+                                <p class="text-xs text-text-secondary opacity-70 line-clamp-2 leading-relaxed">${r.abstract || 'No abstract available.'}</p>
+                            </div>
+                            <div class="flex flex-col gap-2 shrink-0">
+                                <button class="add-search-res-btn w-8 h-8 rounded-lg bg-text-primary text-bg-page flex items-center justify-center hover:opacity-80 transition-opacity" data-ref='${JSON.stringify(r).replace(/'/g, "&apos;")}' title="Add"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                                ${pdfBtn}
+                            </div>
+                        </div>`;
+                    }).join('');
+                } else els.searchResults.innerHTML = `<div class="text-center py-10 opacity-50 text-xs">No results.</div>`;
+                lucide.createIcons();
+            } catch(e) { els.searchResults.innerHTML = `<div class="text-center py-10 text-red-500 text-xs">${e.message}</div>`; }
+            finally { btnText.classList.remove('hidden'); spin.classList.add('hidden'); els.searchBtn.disabled = false; }
+        });
+
+        els.searchResults.addEventListener('click', async e => {
+            const btn = e.target.closest('.add-search-res-btn'); if(!btn) return;
+            const r = JSON.parse(btn.dataset.ref); if(!activeProjectId) return showNotif("Select project!", 'error');
+            try { await addDoc(collection(db,"citations"), { userId: currentUserId, projectId: activeProjectId, title: r.title, author: r.author, year: String(r.year), journal: r.journal, notes: r.abstract || '', createdAt: new Date() }); btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i>`; btn.disabled = true; showNotif("Added."); } catch(err) { showNotif(err.message, 'error'); }
+        });
+
+        // Other Functions (Upload, Export, Modals) - No logic change
+        els.uploadDocBtn.addEventListener('click', () => { if(!activeProjectId) return showNotif("Select project!",'error'); els.docInput.click(); });
+        els.docInput.addEventListener('change', async e => {
+            const f=e.target.files[0]; if(!f) return;
+            const orig=els.uploadDocBtn.innerHTML; els.uploadDocBtn.innerHTML=`Processing...`; els.uploadDocBtn.disabled=true;
+            const fd=new FormData(); fd.append('document',f);
+            try { const res=await fetch('/api/analyze-document',{method:'POST',body:fd}); const d=await res.json();
+                if(d.status==='success'&&d.references) { const r=d.references[0]; await addDoc(collection(db,"citations"),{userId:currentUserId, projectId:activeProjectId, title:r.title||f.name, author:r.author||'AI', year:String(r.year||new Date().getFullYear()), journal:r.journal||'Upload', notes:'Extracted', createdAt:new Date()}); showNotif("Extracted!"); } else throw new Error("Failed");
+            } catch(err) { showNotif(err.message,'error'); } finally { els.uploadDocBtn.innerHTML=orig; els.uploadDocBtn.disabled=false; els.docInput.value=''; }
+        });
+
+        els.exportBtn.addEventListener('click', () => {
+            if(!activeProjectId) return showNotif("Select project!", 'error');
+            const refs = allReferences.filter(r => r.projectId === activeProjectId); if(refs.length===0) return showNotif("Empty.", 'error');
+            let ris = ""; refs.forEach(r => { ris += `TY  - JOUR\nTI  - ${r.title}\nAU  - ${r.author}\nPY  - ${r.year}\nJO  - ${r.journal}\nAB  - ${r.notes}\nER  - \n\n`; });
+            saveAs(new Blob([ris], {type: "application/x-research-info-systems"}), "references.ris");
+        });
+
+        function toggleModal(id, show) { document.getElementById(id).classList.toggle('hidden', !show); }
+        document.querySelectorAll('[id^="close-"], #cancel-project-btn, #cancel-reference-btn, #cancel-reference-x-btn, #cancel-confirm-btn').forEach(b => b.addEventListener('click', () => { toggleModal('project-modal',0); toggleModal('reference-modal',0); toggleModal('confirm-modal',0); toggleModal('search-modal',0); }));
+        
+        els.openSearchBtn.addEventListener('click', () => toggleModal('search-modal',1));
+        document.getElementById('add-project-btn').addEventListener('click', () => { document.getElementById('project-form').reset(); toggleModal('project-modal',1); });
+        document.getElementById('add-reference-btn').addEventListener('click', () => { if(!activeProjectId) return showNotif("Select Project!",'error'); document.getElementById('reference-form').reset(); toggleModal('reference-modal',1); });
+        document.getElementById('search-modal-source').addEventListener('click', e => { if(e.target.classList.contains('source-tag')) e.target.classList.toggle('active'); });
+
+        document.getElementById('project-form').addEventListener('submit', async e => { e.preventDefault(); const t = document.getElementById('project-title-input').value; try { await addDoc(collection(db,"projects"), {title:t, userId:currentUserId, createdAt:new Date()}); toggleModal('project-modal',0); showNotif("Project created."); } catch(err){showNotif(err.message,'error');} });
+        document.getElementById('reference-form').addEventListener('submit', async e => { e.preventDefault(); const f=e.target; const d={title:f.title.value, author:f.author.value, year:f.year.value, journal:f.journal.value, notes:f.notes.value, projectId:activeProjectId, userId:currentUserId, createdAt:new Date()}; try { await addDoc(collection(db,"citations"),d); toggleModal('reference-modal',0); showNotif("Saved."); } catch(err){showNotif(err.message,'error');} });
+
+        function showNotif(msg, type='success') {
+            const el = document.createElement('div'); el.className = `pointer-events-auto px-4 py-2 mb-2 rounded border bg-bg-page shadow-lg text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${type==='error'?'border-red-500 text-red-500':'border-text-primary text-text-primary'}`;
+            el.innerHTML = `<span>${msg}</span>`; document.getElementById('notification-container').appendChild(el); setTimeout(() => el.remove(), 3000);
+        }
+    });
+</script>
+{% endblock %}
