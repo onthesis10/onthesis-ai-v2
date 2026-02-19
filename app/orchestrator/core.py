@@ -1,97 +1,86 @@
 from typing import Generator, Union, Dict, Any
-from app.orchestrator.schema import RequestContext, ExecutionPlan, Step
+import logging
+from app.orchestrator.schema import RequestContext, ExecutionPlan
 from app.orchestrator.registry import ModeRegistry
 from app.orchestrator.modes.base import BaseMode
-import logging
-import uuid
-from datetime import datetime
+from app.orchestrator import modes  # noqa: F401 (load mode registrations)
+from app.orchestrator.engines.rag_engine import RagEngine
+from app.orchestrator.engines.validator_engine import ValidatorEngine
+from app.orchestrator.engines.context_engine import ContextEngine
 
 logger = logging.getLogger(__name__)
 
+
 class AcademicOrchestrator:
-    """
-    Central Controller for OnThesis AI.
-    Coordinates: Context -> Planning -> Mode Execution -> Response
-    """
+    """Central controller for Context -> Plan -> Retrieve -> Execute -> Validate."""
 
     def __init__(self):
-        pass
+        self.rag_engine = RagEngine()
+        self.validator = ValidatorEngine()
 
     def process_request(self, user_id: str, message: str, context_data: Dict[str, Any] = None, mode_name: str = "general") -> Union[Dict, Generator]:
-        """
-        Main entry point for processing user requests.
-        """
         if context_data is None:
             context_data = {}
 
-        # 1. Create Request Context
         request_context = RequestContext(
-            user_id=user_id,
+            user_id=str(user_id),
+            project_id=context_data.get("projectId") or context_data.get("project_id"),
             user_message=message,
             context_data=context_data,
-            # Extract academic preferences from context_data if available
-            academic_level=context_data.get('academic_level', 'S1'),
-            field_of_study=context_data.get('field_of_study'),
-            tone_preference=context_data.get('tone', 'academic')
+            academic_level=context_data.get("academic_level", "S1"),
+            field_of_study=context_data.get("field_of_study") or context_data.get("field"),
+            tone_preference=context_data.get("tone", "academic"),
         )
 
-        logger.info(f"🚀 Orchestrator received request for User: {user_id}, Mode: {mode_name}")
-
-        # 2. Resolve Mode
-        mode: BaseMode = ModeRegistry.get_mode(mode_name)
+        mode: BaseMode = ModeRegistry.get_mode(mode_name) or ModeRegistry.get_mode("general")
         if not mode:
-            logger.error(f"❌ Mode '{mode_name}' not found. Fallback to 'general'.")
-            mode = ModeRegistry.get_mode("general")
-            if not mode:
-                # Critical failure if general mode missing
-                return {"error": "System Error: Default mode not found."}
+            return {"error": "System Error: no mode registered"}
 
-        # 3. Prepare Context (Retrieval/Pruning)
         try:
-            enriched_context = mode.prepare_context(request_context)
-            # Update context with enriched data
-            request_context.context_data.update(enriched_context)
-        except Exception as e:
-            logger.error(f"⚠️ Context Preparation Failed: {e}")
-            # Continue execution even if enrichment fails, logging the error
-
-        # 4. Generate Execution Plan
-        try:
+            enriched = mode.prepare_context(request_context)
+            request_context.context_data.update(enriched or {})
             plan: ExecutionPlan = mode.generate_plan(request_context)
-            logger.info(f"📋 Execution Plan Generated: {len(plan.steps)} steps.")
         except Exception as e:
-            logger.error(f"❌ Planning Failed: {e}")
-            return {"error": f"Failed to generate execution plan: {str(e)}"}
+            logger.error(f"Planning failed: {e}")
+            return {"error": f"Failed to build execution plan: {str(e)}"}
 
-        # 5. Execute Plan
-        # For simplicity in V1, we assume linear execution. 
-        # Future: DAG execution.
-        
-        # If the plan has only one step and it's a streaming step (e.g. chat response)
-        # we return the generator directly.
+        rag_result = {"documents": [], "confidence": 0.0}
+        if plan.requires_rag:
+            rag_result = self.rag_engine.retrieve_with_confidence(
+                query=message,
+                user_id=str(user_id),
+                k=5,
+                chapter=context_data.get("chapter"),
+            )
+            request_context.context_data["rag_confidence"] = rag_result["confidence"]
+            if rag_result["confidence"] < 0.25:
+                request_context.context_data["epistemic_notice"] = (
+                    "Referensi relevan terbatas. Jawaban disusun dengan kehati-hatian epistemik."
+                )
+
+        context_package = ContextEngine.build(plan, request_context, rag_result["documents"])
+        request_context.context_data.update(context_package)
+
+        # Single-step streaming/text/json modes
         if len(plan.steps) == 1:
-            step = plan.steps[0]
             try:
-                result = mode.execute_step(step, request_context)
+                result = mode.execute_step(plan.steps[0], request_context)
                 return result
             except Exception as e:
-                logger.error(f"❌ Execution Failed: {e}")
+                logger.error(f"Execution failed: {e}")
                 return {"error": f"Execution failed: {str(e)}"}
 
-        # For multi-step plans, we might need a different handling strategy (e.g. returning a JSON with results)
         results = {}
         for step in plan.steps:
             try:
-                step.status = "running"
-                res = mode.execute_step(step, request_context)
-                step.result = res
-                step.status = "completed"
-                results[step.name] = res
+                results[step.name] = mode.execute_step(step, request_context)
             except Exception as e:
-                step.status = "failed"
-                step.error = str(e)
-                logger.error(f"❌ Step '{step.name}' Failed: {e}")
-                # Stop chain on failure? Or continue? For now, break.
-                break
-        
+                return {"error": f"Step {step.name} failed: {str(e)}"}
+
+        # Optional validator pass for non-stream aggregated outputs
+        if plan.requires_validation and isinstance(results, dict):
+            for k, v in list(results.items()):
+                if isinstance(v, str):
+                    results[f"{k}_validation"] = self.validator.review(v, requires_validation=True)
+
         return results

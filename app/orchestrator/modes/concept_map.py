@@ -4,15 +4,10 @@ from app.orchestrator.schema import RequestContext, ExecutionPlan, Step
 from app.orchestrator.registry import ModeRegistry
 from litellm import completion
 import json
-import re
+
 
 @ModeRegistry.register("concept_map")
 class ConceptMapMode(BaseMode):
-    """
-    Mode for generating Concept Maps and Knowledge Graphs.
-    Output is strictly JSON conformant to a schema.
-    """
-    
     def __init__(self):
         super().__init__()
         self.mode_name = "concept_map"
@@ -21,55 +16,42 @@ class ConceptMapMode(BaseMode):
         return {}
 
     def generate_plan(self, context: RequestContext) -> ExecutionPlan:
-        step = Step(
-            name="generate_concept_map",
-            description="Generate JSON structure for concept map.",
-            tool="llm_json",
-            params={
-                "model": "groq/llama-3.3-70b-versatile"
-            }
-        )
+        step = Step(name="generate_concept_map", description="Generate JSON structure for concept map.", tool="llm_json")
         return ExecutionPlan(
             request_id=str(context.session_id) if context.session_id else "req_CM",
+            project_id=context.project_id,
+            user_id=context.user_id,
             mode=self.mode_name,
-            steps=[step]
+            intent="concept_mapping",
+            requires_rag=True,
+            requires_validation=True,
+            degree_level=context.academic_level,
+            tone_profile=context.tone_preference,
+            steps=[step],
         )
 
     def execute_step(self, step: Step, context: RequestContext) -> Union[str, Generator, Dict]:
         if step.tool == "llm_json":
             return self._generate_json(context.user_message)
-        return "Unknown tool"
+        return {"error": "Unknown tool"}
 
     def _generate_json(self, topic: str) -> Dict:
-        """
-        Generates concept map JSON.
-        """
         system_prompt = (
-            "You are a Knowledge Graph Generator.\n"
-            "Task: Create a Concept Map for the user's topic.\n"
-            "Output Format: JSON ONLY.\n"
-            "Schema:\n"
-            "{\n"
-            "  \"nodes\": [{\"id\": \"1\", \"label\": \"Main Concept\", \"type\": \"core\"}],\n"
-            "  \"edges\": [{\"source\": \"1\", \"target\": \"2\", \"relation\": \"causes\"}]\n"
-            "}\n"
-            "Relation Types: hierarchical, causal, associative.\n"
+            "Generate concept map as JSON only with this schema: "
+            "{nodes:[{id,label,level}],edges:[{source,target,relation_type}]}. "
+            "level is integer hierarchy (1=root). relation_type: hierarchical|causal|associative."
         )
-        
         try:
             response = completion(
                 model="groq/llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": topic}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": topic}],
                 response_format={"type": "json_object"},
-                temperature=0.1
+                temperature=0.1,
             )
             content = response.choices[0].message.content
-            # Basic cleaning
-            if "```" in content:
-                content = content.split("```json")[-1].split("```")[0].strip()
-            return json.loads(content)
+            payload = json.loads(content)
+            payload.setdefault("nodes", [])
+            payload.setdefault("edges", [])
+            return payload
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": str(e), "nodes": [], "edges": []}

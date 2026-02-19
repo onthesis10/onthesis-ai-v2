@@ -455,7 +455,7 @@ def chat_with_ai_stream():
             user_id=current_user.id,
             message=data.get('message', ''),
             context_data=context_data,
-            mode_name='writing' # Chat is also handled by WritingMode which serves as "Academic Copilot"
+            mode_name=data.get('mode', 'writing')
         )
         
         # 4. INCREMENT LIMIT CHAT
@@ -1143,3 +1143,30 @@ def generate_stream_endpoint():
         logger.error(f"Generate Stream Error: {e}")
         # Return JSON error dengan status 500
         return jsonify({'message': f"Server Error: {str(e)}"}), 500
+
+
+@assistant_bp.route('/api/orchestrator/execute', methods=['POST'])
+@login_required
+def orchestrator_execute():
+    """Unified endpoint for orchestrator modes: writing, critique, concept_map, mind_map, sidang_simulation."""
+    try:
+        data = request.get_json() or {}
+        mode = data.get('mode', 'writing')
+        message = data.get('message', '')
+        context_data = data.get('context', {}) or {}
+        if data.get('projectId') and 'projectId' not in context_data:
+            context_data['projectId'] = data.get('projectId')
+
+        result = orchestrator.process_request(
+            user_id=current_user.id,
+            message=message,
+            context_data=context_data,
+            mode_name=mode
+        )
+
+        if hasattr(result, '__iter__') and not isinstance(result, (dict, str, bytes)):
+            return Response(stream_with_context(result), mimetype='text/plain')
+        return jsonify(result if isinstance(result, dict) else {'result': result})
+    except Exception as e:
+        logger.error(f"Orchestrator Execute Error: {e}")
+        return jsonify({'error': str(e)}), 500
