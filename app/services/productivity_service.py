@@ -1,4 +1,5 @@
 from app import firestore_db
+from firebase_admin import firestore
 from datetime import datetime, timedelta
 import logging
 
@@ -15,8 +16,8 @@ class ProductivityService:
             log_ref = firestore_db.collection('users').document(user_id).collection('productivity_logs').document()
             log_data = {
                 'duration_seconds': duration_seconds,
-                'created_at': datetime.utcnow(),
-                'timestamp': firestore_db.server_timestamp() # Server time for accuracy
+                'created_at': datetime.now().astimezone(), # Use timezone-aware local time
+                'timestamp': firestore.SERVER_TIMESTAMP # Server time for accuracy
             }
             log_ref.set(log_data)
             
@@ -201,7 +202,9 @@ class ProductivityService:
                 duration = data.get('duration_seconds', 0)
                 
                 if created_at:
-                    date_str = created_at.strftime('%Y-%m-%d')
+                    # Convert to server's local timezone to match frontend dates
+                    local_dt = created_at.astimezone() if created_at.tzinfo else created_at.astimezone()
+                    date_str = local_dt.strftime('%Y-%m-%d')
                     if date_str in heatmap_data:
                         heatmap_data[date_str] += duration
                     else:

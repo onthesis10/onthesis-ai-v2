@@ -15,16 +15,19 @@
 
   /* ---------- LIGHT (Ocean Scholar - Clean Academic Confidence) ---------- */
   :root {
-    
+
     /* Branding */
     --ocean-1: #0EA5E9;
     --ocean-2: #0284C7;
     --ocean-highlight: #38BDF8;
-    --ink: #0F172A; /* Slate 900 */
+    --ink: #0F172A;
+    /* Slate 900 */
 
     /* Semantic Colors - Glassmorphism Base */
-    --background: 210 40% 98%; /* Soft Cool White */
-    --foreground: 222 47% 12%; /* Deep Navy Text */
+    --background: 210 40% 98%;
+    /* Soft Cool White */
+    --foreground: 222 47% 12%;
+    /* Deep Navy Text */
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 12%;
@@ -32,7 +35,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 12%;
 
-    --primary: 199 89% 48%; /* Bright Sky Blue */
+    --primary: 199 89% 48%;
+    /* Bright Sky Blue */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96.1%;
@@ -64,22 +68,27 @@
   /* ---------- DARK (Deep Abyss - Neon & Glow) ---------- */
   .dark {
     /* Deep Ocean Palette */
-    --ocean-1: #38BDF8; /* Sky 400 - Neon Glow */
-    --ocean-2: #0EA5E9; /* Sky 500 */
+    --ocean-1: #38BDF8;
+    /* Sky 400 - Neon Glow */
+    --ocean-2: #0EA5E9;
+    /* Sky 500 */
     --ocean-highlight: #7DD3FC;
     --ink: #F8FAFC;
 
     /* Backgrounds - Deep Midnight Blue */
-    --background: 224 71% 4%; /* Very Dark Blue */
+    --background: 224 71% 4%;
+    /* Very Dark Blue */
     --foreground: 210 40% 98%;
 
-    --card: 224 71% 6%; /* Slightly lighter deep blue */
+    --card: 224 71% 6%;
+    /* Slightly lighter deep blue */
     --card-foreground: 210 40% 98%;
 
     --popover: 224 71% 6%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 199 89% 48%; /* Electric Blue */
+    --primary: 199 89% 48%;
+    /* Electric Blue */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 217.2 32.6% 17.5%;
@@ -106,22 +115,30 @@
   /* ---------- HAPPY (Tropical Oasis - Vibrant & Refreshing) ---------- */
   .happy {
     /* Tropical Palette */
-    --ocean-1: #2DD4BF; /* Teal 400 */
-    --ocean-2: #14B8A6; /* Teal 500 */
-    --ocean-highlight: #5EEAD4; /* Teal 300 */
-    --ink: #134E4A; /* Teal 900 */
+    --ocean-1: #2DD4BF;
+    /* Teal 400 */
+    --ocean-2: #14B8A6;
+    /* Teal 500 */
+    --ocean-highlight: #5EEAD4;
+    /* Teal 300 */
+    --ink: #134E4A;
+    /* Teal 900 */
 
     /* Backgrounds - Soft Caribbean Water */
-    --background: 170 60% 97%; /* Very pale teal/cyan */
-    --foreground: 180 40% 15%; /* Deep Teal Text */
+    --background: 170 60% 97%;
+    /* Very pale teal/cyan */
+    --foreground: 180 40% 15%;
+    /* Deep Teal Text */
 
-    --card: 0 0% 100%; /* Pure White Glass */
+    --card: 0 0% 100%;
+    /* Pure White Glass */
     --card-foreground: 180 40% 15%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 180 40% 15%;
 
-    --primary: 175 80% 40%; /* Strong Tropical Teal */
+    --primary: 175 80% 40%;
+    /* Strong Tropical Teal */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 170 50% 92%;
@@ -215,4 +232,448 @@
   .glass-btn {
     @apply relative overflow-hidden backdrop-blur-md border border-white/10 transition-all duration-300;
   }
+}
+
+/* ============================================
+   PARAGRAPH ID GUTTER — Visual Labels (Sprint 1+)
+   Design: thesis-agent-design.html
+   Uses CSS ::before + data-para-num attribute
+   ============================================ */
+
+/* Paragraph block container */
+.thesis-para-block {
+  position: relative;
+}
+
+/* Para ID label via ::before pseudo-element */
+.thesis-para-block[data-para-num]::before {
+  content: attr(data-para-num);
+  position: absolute;
+  left: -44px;
+  top: 2px;
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  color: transparent;
+  width: 38px;
+  text-align: right;
+  user-select: none;
+  pointer-events: none;
+  transition: color 0.15s ease;
+  line-height: 1.8;
+  letter-spacing: -0.02em;
+}
+
+/* Show on paragraph hover */
+.thesis-para-block[data-para-num]:hover::before {
+  color: #9CA3AF;
+}
+
+/* Dark mode hover */
+.dark .thesis-para-block[data-para-num]:hover::before {
+  color: #6B7280;
+}
+
+/* Happy mode hover */
+.happy .thesis-para-block[data-para-num]:hover::before {
+  color: #78716C;
+}
+
+/* ============================================
+   DIFF STATES — Sprint 3: Editor Diff Bridge
+   Visual feedback for agent-proposed changes
+   ============================================ */
+
+/* ── EDIT: Blue highlight — agent wants to modify this paragraph ── */
+.thesis-para-block.diff-edit {
+  background: rgba(59, 130, 246, 0.06);
+  border-left: 2.5px solid #3B82F6;
+  padding-left: 10px;
+  margin-left: -13px;
+  border-radius: 0 4px 4px 0;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+/* ── ADD: Green highlight — agent wants to insert a new paragraph ── */
+.thesis-para-block.diff-add {
+  background: rgba(34, 197, 94, 0.07);
+  border-left: 2.5px solid #22C55E;
+  padding-left: 10px;
+  margin-left: -13px;
+  border-radius: 0 4px 4px 0;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+/* ── DELETE: Red highlight — agent wants to remove this paragraph ── */
+.thesis-para-block.diff-del {
+  background: rgba(239, 68, 68, 0.07);
+  border-left: 2.5px solid #EF4444;
+  padding-left: 10px;
+  margin-left: -13px;
+  border-radius: 0 4px 4px 0;
+  opacity: 0.65;
+  text-decoration: line-through;
+  transition: background 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+}
+
+/* ── Dark mode adjustments ── */
+.dark .thesis-para-block.diff-edit {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.dark .thesis-para-block.diff-add {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.dark .thesis-para-block.diff-del {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ── Happy mode adjustments ── */
+.happy .thesis-para-block.diff-edit {
+  border-left-color: #6366F1;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.happy .thesis-para-block.diff-add {
+  border-left-color: #10B981;
+  background: rgba(16, 185, 129, 0.07);
+}
+
+.happy .thesis-para-block.diff-del {
+  border-left-color: #F43F5E;
+  background: rgba(244, 63, 94, 0.07);
+}
+
+/* ── Paragraph number label colors for diff states ── */
+.thesis-para-block.diff-edit[data-para-num]::before {
+  color: #3B82F6 !important;
+}
+
+.thesis-para-block.diff-add[data-para-num]::before {
+  color: #22C55E !important;
+}
+
+.thesis-para-block.diff-del[data-para-num]::before {
+  color: #EF4444 !important;
+}
+
+/* ============================================
+   INLINE DIFF BLOCKS (Docs Style)
+   Visual feedback for agent-proposed changes
+   ============================================ */
+
+.thesis-diff-block {
+  display: flex;
+  margin: 16px 0;
+  font-family: 'Times New Roman', serif;
+  font-size: 12pt;
+  line-height: 2.0;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Container Variants ── */
+.thesis-diff-block.diff-edit {
+  background: rgba(59, 130, 246, 0.05);
+  /* very light blue */
+  border-left: 2px solid #3B82F6;
+}
+
+.thesis-diff-block.diff-insert {
+  background: rgba(34, 197, 94, 0.05);
+  /* very light green */
+  border-left: 2px solid #22C55E;
+}
+
+.thesis-diff-block.diff-delete {
+  background: rgba(239, 68, 68, 0.05);
+  /* very light red */
+  border-left: 2px solid #EF4444;
+}
+
+/* ── Dark Mode ── */
+.dark .thesis-diff-block.diff-edit {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.dark .thesis-diff-block.diff-insert {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.dark .thesis-diff-block.diff-delete {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ── Left Gutter (Paragraph ID) ── */
+.diff-gutter {
+  width: 44px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  padding-right: 8px;
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 9px;
+  user-select: none;
+}
+
+.diff-para-id {
+  color: #94A3B8;
+  letter-spacing: -0.02em;
+}
+
+.diff-edit .diff-para-id {
+  color: #818cf8;
+}
+
+.diff-insert .diff-para-id {
+  color: #4ade80;
+}
+
+.diff-delete .diff-para-id {
+  color: #f87171;
+}
+
+/* ── Main Content Area ── */
+.diff-main {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-content {
+  padding: 8px 16px 8px 0;
+  position: relative;
+  display: inline;
+  /* Keep text flow inline with badge */
+}
+
+/* Text Handling */
+.diff-text-old {
+  display: inline;
+  color: #991B1B;
+  text-decoration: line-through;
+  opacity: 0.7;
+  margin-right: 6px;
+}
+
+.dark .diff-text-old {
+  color: #FCA5A5;
+}
+
+.diff-text-new {
+  display: inline;
+}
+
+.diff-edit .diff-text-new {
+  color: #1e40af;
+}
+
+.diff-insert .diff-text-new {
+  color: #166534;
+}
+
+.dark .diff-edit .diff-text-new {
+  color: #bfdbfe;
+}
+
+.dark .diff-insert .diff-text-new {
+  color: #bbf7d0;
+}
+
+/* ── Status Badge (edit/insert/delete) ── */
+.diff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: lowercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
+  transform: translateY(-2px);
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.diff-edit .diff-badge {
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-color: #c7d2fe;
+}
+
+.diff-insert .diff-badge {
+  background: #dcfce7;
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.diff-delete .diff-badge {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.dark .diff-edit .diff-badge {
+  background: rgba(79, 70, 229, 0.2);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.dark .diff-insert .diff-badge {
+  background: rgba(22, 163, 74, 0.2);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.dark .diff-delete .diff-badge {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* ── AI Reason ── */
+.diff-reason {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  padding: 6px 16px 6px 0;
+  margin-top: 4px;
+  color: #92400e;
+}
+
+.dark .diff-reason {
+  color: #fcd34d;
+}
+
+.diff-reason-label {
+  font-weight: 700;
+  font-size: 9px;
+  background: rgba(217, 119, 6, 0.2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+
+/* ── Action Toolbar (Bottom) ── */
+.diff-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px 8px 0;
+  margin-top: 4px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+  font-family: 'Inter', sans-serif;
+}
+
+.dark .diff-toolbar {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.diff-toolbar-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #94A3B8;
+}
+
+.diff-toolbar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Base button styles */
+.diff-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+/* Specific Buttons */
+.diff-btn-accept {
+  color: #059669;
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
+.diff-btn-accept:hover {
+  background: #d1fae5;
+}
+
+.dark .diff-btn-accept {
+  color: #34d399;
+  border-color: rgba(5, 150, 105, 0.4);
+  background: rgba(5, 150, 105, 0.15);
+}
+
+.dark .diff-btn-accept:hover {
+  background: rgba(5, 150, 105, 0.3);
+}
+
+.diff-btn-reject {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.diff-btn-reject:hover {
+  background: #fee2e2;
+}
+
+.dark .diff-btn-reject {
+  color: #f87171;
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.15);
+}
+
+.dark .diff-btn-reject:hover {
+  background: rgba(220, 38, 38, 0.3);
+}
+
+/* ============================================
+   CITATION (BODYNOTE) STYLING
+   ============================================ */
+.lexical-citation {
+  display: inline-block;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  padding: 0px 4px;
+  font-size: 0.95em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  font-family: inherit;
+  margin: 0 2px;
+}
+
+.lexical-citation:hover {
+  background-color: #dbeafe;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.dark .lexical-citation {
+  background-color: rgba(30, 58, 138, 0.3);
+  color: #93c5fd;
+  border-color: rgba(30, 58, 138, 0.8);
+}
+
+.dark .lexical-citation:hover {
+  background-color: rgba(30, 58, 138, 0.5);
+  border-color: #60a5fa;
 }

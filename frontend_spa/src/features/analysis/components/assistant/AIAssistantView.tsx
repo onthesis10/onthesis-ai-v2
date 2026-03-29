@@ -12,6 +12,7 @@ import { Analytics } from '../../utils/analytics'
 import { ChartRenderer } from '../../visualization/ChartRenderer'
 import { transformArtifactToNormalizedData } from '../../visualization/utils/artifactAdapter'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useThemeStore, type ThemeMode } from '@/store/themeStore'
 
 import { MarkdownRenderer } from './MarkdownRenderer'
 import { OnThesisLogo } from '../ui/OnThesisLogo'
@@ -59,6 +60,8 @@ interface Message {
 
 const ExecutionLog = ({ steps }: { steps: AnalysisStep[] }) => {
     const [expandedIds, setExpandedIds] = useState<string[]>([])
+    const { theme } = useThemeStore()
+    const isHappy = theme === 'happy';
 
     const toggleExpand = (id: string) => {
         setExpandedIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id])
@@ -67,9 +70,9 @@ const ExecutionLog = ({ steps }: { steps: AnalysisStep[] }) => {
     return (
         <div className="flex flex-col gap-2 mb-3 w-full animate-in fade-in slide-in-from-top-2">
             {steps.map(step => (
-                <div key={step.id} className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden bg-slate-50 dark:bg-black/20">
+                <div key={step.id} className={`border rounded-lg overflow-hidden ${isHappy ? 'bg-orange-50 border-orange-100' : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20'}`}>
                     <div
-                        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                        className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors ${isHappy ? 'hover:bg-orange-100' : 'hover:bg-slate-100 dark:hover:bg-white/5'}`}
                         onClick={() => toggleExpand(step.id)}
                     >
                         <div className="flex items-center gap-2 overflow-hidden">
@@ -157,15 +160,95 @@ const CopyMessageButton = ({ text }: { text: string }) => {
 
 export const AIAssistantView = () => {
     // --- Store & State ---
-    const {
-        researchContext,
-        data,
-        variables,
-        analysisResult,
-        fileName,
-        aiMode,
-        setAiMode
-    } = useAnalysisStore()
+    const researchContext = useAnalysisStore(s => s.researchContext);
+    const data = useAnalysisStore(s => s.data);
+    const variables = useAnalysisStore(s => s.variables);
+    const analysisResult = useAnalysisStore(s => s.analysisResult);
+    const fileName = useAnalysisStore(s => s.fileName);
+    const aiMode = useAnalysisStore(s => s.aiMode);
+    const setAiMode = useAnalysisStore(s => s.setAiMode);
+
+    const { theme } = useThemeStore()
+
+    const themeStyles = {
+        light: {
+            bgMain: "bg-slate-50/50 text-slate-900 border-slate-200",
+            sidebar: "bg-[#F5F5F7]/80 backdrop-blur-3xl",
+            sidebarBorder: "border-slate-200/50",
+            inspector: "bg-[#F5F5F7]/80 backdrop-blur-3xl border-slate-200/50",
+            header: "bg-white/80 backdrop-blur-3xl border-slate-200/50",
+            inputArea: "bg-gradient-to-t from-slate-50/50 via-slate-50/50 to-transparent",
+            inputBox: "bg-white/90 border border-slate-200 shadow-sm",
+            dataCard: "bg-white border-transparent shadow-sm",
+            textMuted: "text-slate-500",
+            buttonHover: "hover:bg-black/5",
+            modeBtnContainer: "bg-slate-100 border border-slate-200",
+            modeBtnActive: "bg-[#007AFF] text-white shadow-md shadow-blue-500/20",
+            modeBtnInactive: "text-slate-500 hover:text-slate-700",
+            variableBtnActive: "bg-[#007AFF] text-white font-medium shadow-md shadow-blue-500/20",
+            variableBtnInactive: "hover:bg-black/5 text-slate-600",
+            userMessage: "bg-gradient-to-br from-blue-600 to-cyan-500 text-white shadow-sm",
+            assistantText: "text-slate-800",
+            artifactCard: "bg-white border-slate-200 shadow-sm",
+            artifactHeader: "bg-slate-50/50 border-slate-100",
+            chartBox: "bg-white border-slate-200",
+            reasoningBox: "bg-slate-50 border-slate-200 text-slate-500",
+            actionBtn: "bg-white border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600",
+            logoText: "from-blue-600 to-cyan-500",
+        },
+        dark: {
+            bgMain: "bg-[#0B1120] text-[#E3E3E3] border-white/5",
+            sidebar: "bg-[#0B1120]/70 backdrop-blur-3xl",
+            sidebarBorder: "border-white/5",
+            inspector: "bg-[#1E293B]/80 backdrop-blur-3xl border-white/5",
+            header: "bg-[#0B1120]/80 backdrop-blur-3xl border-white/5",
+            inputArea: "bg-gradient-to-t from-[#0B1120] via-[#0B1120] to-transparent",
+            inputBox: "bg-white/5 border border-white/10 shadow-lg",
+            dataCard: "bg-white/5 border-transparent hover:bg-white/10 transition-colors",
+            textMuted: "text-slate-400",
+            buttonHover: "hover:bg-white/10",
+            modeBtnContainer: "bg-white/5 border border-white/5",
+            modeBtnActive: "bg-[#0EA5E9] text-white shadow-[0_0_20px_-5px_rgba(14,165,233,0.5)]",
+            modeBtnInactive: "text-slate-500 hover:text-slate-300",
+            variableBtnActive: "bg-[#0EA5E9] text-white font-medium shadow-[0_0_20px_-5px_rgba(14,165,233,0.5)]",
+            variableBtnInactive: "hover:bg-white/5 text-slate-400",
+            userMessage: "bg-gradient-to-br from-blue-600 to-cyan-500 text-white shadow-sm",
+            assistantText: "text-[#E3E3E3]",
+            artifactCard: "bg-[#1E293B] border-white/5 shadow-sm",
+            artifactHeader: "bg-white/[0.02] border-white/5",
+            chartBox: "bg-[#0D1117] border-white/5",
+            reasoningBox: "bg-white/[0.03] border-white/10 text-slate-400",
+            actionBtn: "bg-white/5 border-white/10 text-slate-300 hover:bg-blue-500/10 hover:border-blue-500/20 hover:text-blue-400",
+            logoText: "from-blue-600 to-cyan-500",
+        },
+        happy: {
+            bgMain: "bg-[#FFFCF5] text-stone-800 border-orange-100",
+            sidebar: "bg-[#FFFCF5]/70 backdrop-blur-3xl",
+            sidebarBorder: "border-orange-100/50",
+            inspector: "bg-[#FFFBF2]/80 backdrop-blur-3xl border-orange-100/50",
+            header: "bg-[#FFFCF5]/90 backdrop-blur-3xl border-orange-100/50",
+            inputArea: "bg-gradient-to-t from-[#FFFCF5] via-[#FFFCF5] to-transparent",
+            inputBox: "bg-white/90 border border-orange-100 shadow-sm focus-within:ring-1 focus-within:ring-orange-200 focus-within:shadow-md",
+            dataCard: "bg-white/80 border-orange-100 shadow-sm",
+            textMuted: "text-stone-500",
+            buttonHover: "hover:bg-orange-50 hover:text-orange-500 text-orange-400",
+            modeBtnContainer: "bg-white/50 border border-orange-100",
+            modeBtnActive: "bg-gradient-to-r from-orange-400 to-rose-400 text-white shadow-lg shadow-orange-500/25",
+            modeBtnInactive: "text-stone-500 hover:text-orange-600",
+            variableBtnActive: "bg-gradient-to-r from-orange-400 to-rose-400 text-white font-bold shadow-lg shadow-orange-500/25",
+            variableBtnInactive: "hover:bg-orange-50 text-stone-500 hover:text-orange-600",
+            userMessage: "bg-gradient-to-r from-orange-400 to-rose-400 text-white shadow-md shadow-orange-500/20",
+            assistantText: "text-stone-800",
+            artifactCard: "bg-white border-orange-100 shadow-xl shadow-orange-500/5",
+            artifactHeader: "bg-orange-50/50 border-orange-100",
+            chartBox: "bg-white border-orange-100 ring-1 ring-orange-50",
+            reasoningBox: "bg-orange-50 border-orange-100 text-stone-500",
+            actionBtn: "bg-white border-orange-100 text-stone-600 hover:bg-orange-50 hover:border-orange-200 hover:text-orange-600 shadow-sm hover:shadow-md transition-all",
+            logoText: "from-orange-500 to-rose-400",
+        }
+    }[theme as ThemeMode || 'dark']
+
+    const activeConfig = themeStyles
 
     const [input, setInput] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -519,7 +602,7 @@ export const AIAssistantView = () => {
 
     return (
         <div
-            className="h-full w-full bg-white dark:bg-[#131314] font-sans flex overflow-hidden text-slate-900 dark:text-[#E3E3E3]"
+            className={`h-full w-full font-sans flex overflow-hidden ${activeConfig.bgMain}`}
             style={{
                 // @ts-ignore
                 '--ocean-1': '#006FEE',
@@ -537,11 +620,11 @@ export const AIAssistantView = () => {
                         animate={{ width: 260, opacity: 1 }}
                         exit={{ width: 0, opacity: 0 }}
                         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                        className="h-full bg-[#F0F4F9] dark:bg-[#1E1F20] flex flex-col shrink-0 border-r border-transparent dark:border-white/5"
+                        className={`h-full flex flex-col shrink-0 border-r ${activeConfig.sidebar} ${activeConfig.sidebarBorder}`}
                     >
                         {/* Sidebar Header */}
                         <div className="h-14 flex items-center justify-between px-4 mt-2">
-                            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-white/10 rounded-full transition-colors text-slate-500">
+                            <button onClick={() => setIsSidebarOpen(false)} className={`p-2 rounded-full transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}>
                                 <PanelLeftClose className="w-5 h-5" />
                             </button>
                         </div>
@@ -550,9 +633,9 @@ export const AIAssistantView = () => {
                         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-6 custom-scrollbar">
                             {/* File Info */}
                             <div>
-                                <h3 className="text-xs font-semibold text-slate-500 mb-3 px-2">Data Source</h3>
+                                <h3 className={`text-xs font-semibold px-2 mb-3 ${activeConfig.textMuted}`}>Data Source</h3>
                                 {fileName ? (
-                                    <div className="p-3 bg-white dark:bg-[#28292A] rounded-2xl shadow-sm group cursor-default border border-transparent dark:border-white/5">
+                                    <div className={`p-3 rounded-2xl border cursor-default group ${activeConfig.dataCard}`}>
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg text-emerald-600 dark:text-emerald-400">
                                                 <FileSpreadsheet className="w-5 h-5" />
@@ -573,7 +656,7 @@ export const AIAssistantView = () => {
                             {/* Variables */}
                             <div>
                                 <div className="flex items-center justify-between mb-2 px-2">
-                                    <h3 className="text-xs font-semibold text-slate-500">Variables</h3>
+                                    <h3 className={`text-xs font-semibold ${activeConfig.textMuted}`}>Variables</h3>
                                     {selectedVariableIds.length > 0 && (
                                         <button onClick={() => setSelectedVariableIds([])} className="text-xs text-indigo-500 hover:text-indigo-400">Reset</button>
                                     )}
@@ -586,8 +669,8 @@ export const AIAssistantView = () => {
                                             className={`
                                                 px-4 py-2 text-xs rounded-full text-left truncate transition-all
                                                 ${selectedVariableIds.includes(v.name)
-                                                    ? 'bg-[#D3E3FD] dark:bg-[#004A77] text-[#041E49] dark:text-[#C2E7FF] font-medium'
-                                                    : 'hover:bg-slate-200 dark:hover:bg-white/5 text-slate-600 dark:text-slate-400'
+                                                    ? activeConfig.variableBtnActive
+                                                    : activeConfig.variableBtnInactive
                                                 }
                                             `}
                                         >
@@ -603,25 +686,25 @@ export const AIAssistantView = () => {
 
 
             {/* --- CENTER CHAT STUDIO --- */}
-            <div className="flex-1 flex flex-col h-full bg-slate-50/50 dark:bg-[#0B1120] relative min-w-[400px]">
+            <div className={`flex-1 flex flex-col h-full relative min-w-[400px] ${theme === 'happy' ? 'bg-[#FFFCF5]' : (theme === 'dark' ? 'bg-[#0B1120]' : 'bg-slate-50/50')}`}>
 
                 {/* Header - Minimalist */}
-                <div className="h-16 flex items-center justify-between px-6 sticky top-0 z-10 bg-white/80 dark:bg-[#131314]/80 backdrop-blur-md border-b border-transparent dark:border-white/5">
+                <div className={`h-16 flex items-center justify-between px-6 sticky top-0 z-10 backdrop-blur-md border-b ${activeConfig.header}`}>
                     <div className="flex items-center gap-3">
                         {!isSidebarOpen && (
-                            <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-500 transition-colors">
+                            <button onClick={() => setIsSidebarOpen(true)} className={`p-2 rounded-full transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}>
                                 <PanelLeftOpen className="w-5 h-5" />
                             </button>
                         )}
                         <div className="flex items-center gap-2 cursor-pointer select-none">
-                            <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">OnThesis</span>
-                            <span className="text-lg text-slate-400">Analysis</span>
-                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                            <span className={`text-lg font-bold bg-gradient-to-r bg-clip-text text-transparent ${activeConfig.logoText}`}>OnThesis</span>
+                            <span className={`text-lg ${activeConfig.textMuted}`}>Analysis</span>
+                            <ChevronDown className={`w-4 h-4 ${activeConfig.textMuted}`} />
                         </div>
                     </div>
 
                     {/* Mode Switcher */}
-                    <div className="bg-slate-100 dark:bg-white/5 p-1 rounded-full flex gap-1 border border-slate-200 dark:border-white/5">
+                    <div className={`p-1 rounded-full flex gap-1 ${activeConfig.modeBtnContainer}`}>
                         {(['analyst', 'writing', 'defense'] as const).map(mode => (
                             <button
                                 key={mode}
@@ -629,8 +712,8 @@ export const AIAssistantView = () => {
                                 className={`
                                     px-3 py-1 rounded-full text-[10px] font-medium transition-all
                                     ${aiMode === mode
-                                        ? 'bg-white dark:bg-blue-600 text-slate-900 dark:text-white shadow-sm'
-                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                        ? activeConfig.modeBtnActive
+                                        : activeConfig.modeBtnInactive
                                     }
                                 `}
                             >
@@ -643,20 +726,20 @@ export const AIAssistantView = () => {
                     <div className="flex items-center gap-1">
                         <button
                             onClick={handleNewChat}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 hover:text-blue-500 rounded-full transition-colors"
+                            className={`p-2 rounded-full transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}
                             title="Chat Baru"
                         >
                             <SquarePen className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setIsHistoryOpen(true)}
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 hover:text-blue-500 rounded-full transition-colors"
+                            className={`p-2 rounded-full transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}
                             title="Riwayat Chat"
                         >
                             <MessageSquare className="w-4 h-4" />
                         </button>
                         {!isInspectorOpen && (
-                            <button onClick={() => setIsInspectorOpen(true)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors">
+                            <button onClick={() => setIsInspectorOpen(true)} className={`p-2 rounded-full transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}>
                                 <PanelRightOpen className="w-4 h-4" />
                             </button>
                         )}
@@ -686,11 +769,11 @@ export const AIAssistantView = () => {
 
                                 {/* Reasoning Block (Analyst Mode) */}
                                 {msg.role === 'assistant' && msg.reasoning && aiMode === 'analyst' && (
-                                    <div className="bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl pl-4 pr-4 py-3 mb-3 w-full">
-                                        <div className="flex items-center gap-1.5 font-semibold mb-2 text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">
+                                    <div className={`rounded-xl pl-4 pr-4 py-3 mb-3 w-full border ${activeConfig.reasoningBox}`}>
+                                        <div className={`flex items-center gap-1.5 font-semibold mb-2 uppercase tracking-wider text-[10px] ${activeConfig.textMuted}`}>
                                             <Lightbulb className="w-3 h-3" /> Thinking
                                         </div>
-                                        <div className="text-[13px] leading-relaxed text-slate-500 dark:text-slate-400 font-mono whitespace-pre-wrap">
+                                        <div className={`text-[13px] leading-relaxed font-mono whitespace-pre-wrap ${activeConfig.textMuted}`}>
                                             {msg.reasoning}
                                         </div>
                                     </div>
@@ -703,11 +786,11 @@ export const AIAssistantView = () => {
 
                                 {/* Main Text */}
                                 {msg.role === 'user' ? (
-                                    <div className="bg-gradient-to-br from-blue-600 to-cyan-500 text-white px-5 py-3 rounded-[20px] rounded-tr-sm text-[15px] leading-7 font-medium shadow-sm">
+                                    <div className={`px-5 py-3 rounded-[20px] rounded-tr-sm text-[15px] leading-7 font-medium ${activeConfig.userMessage}`}>
                                         {msg.content}
                                     </div>
                                 ) : (
-                                    <div className="relative group/msg w-full pl-0 text-slate-800 dark:text-[#E3E3E3]">
+                                    <div className={`relative group/msg w-full pl-0 ${activeConfig.assistantText}`}>
                                         {/* Assistant Markdown Content */}
                                         <div className="py-1">
                                             <MarkdownRenderer content={msg.content} />
@@ -744,7 +827,7 @@ export const AIAssistantView = () => {
                                             <div className="mt-4 space-y-3">
                                                 {msg.artifacts.map((artifact: any, idx: number) => (
                                                     artifact.type === 'image_base64' && (
-                                                        <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-sm">
+                                                        <div key={idx} className={`rounded-xl overflow-hidden border shadow-sm ${activeConfig.chartBox}`}>
                                                             <img
                                                                 src={`data:image/png;base64,${artifact.data}`}
                                                                 alt={`Chart ${idx + 1}`}
@@ -765,13 +848,7 @@ export const AIAssistantView = () => {
                                             <button
                                                 key={i}
                                                 onClick={() => executeAction(action)}
-                                                className="
-                                                        px-3.5 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 
-                                                        rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300
-                                                        hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:border-blue-200 dark:hover:border-blue-500/20 hover:text-blue-600 dark:hover:text-blue-400
-                                                        transition-all active:scale-[0.97] shadow-sm
-                                                        flex items-center gap-1.5
-                                                    "
+                                                className={`px-3.5 py-2 border rounded-xl text-xs font-medium transition-all active:scale-[0.97] flex items-center gap-1.5 ${activeConfig.actionBtn}`}
                                             >
                                                 <Play className="w-3 h-3 opacity-40" />
                                                 {action.label}
@@ -799,10 +876,10 @@ export const AIAssistantView = () => {
                 </div>
 
                 {/* Input Area (Floating Bottom) */}
-                <div className="w-full px-4 sm:px-[10%] pb-6 pt-2 z-20 bg-gradient-to-t from-white via-white to-transparent dark:from-[#131314] dark:via-[#131314] dark:to-transparent">
+                <div className={`w-full px-4 sm:px-[10%] pb-6 pt-2 z-20 ${activeConfig.inputArea}`}>
                     <div className={`
-                        relative w-full max-w-3xl mx-auto bg-[#F0F4F9] dark:bg-[#1E1F20] 
-                        rounded-[2rem] transition-all duration-300 shadow-sm focus-within:shadow-md
+                        relative w-full max-w-3xl mx-auto rounded-[2rem] transition-all duration-300 
+                        ${activeConfig.inputBox}
                         ${isLoading ? 'opacity-80' : 'opacity-100'}
                     `}>
                         <div className="flex items-end p-2 pl-4">
@@ -813,7 +890,7 @@ export const AIAssistantView = () => {
                                 onKeyDown={handleKeyDown}
                                 placeholder="Ask OnThesis..."
 
-                                className="w-full bg-transparent border-none outline-none ring-0 focus:ring-0 focus:outline-none focus:border-none py-3.5 text-base text-slate-800 dark:text-white placeholder:text-slate-500 resize-none max-h-40 custom-scrollbar shadow-none"
+                                className={`w-full bg-transparent border-none outline-none ring-0 focus:ring-0 focus:outline-none focus:border-none py-3.5 text-base placeholder:text-slate-500 resize-none max-h-40 custom-scrollbar shadow-none ${activeConfig.assistantText}`}
                                 rows={1}
                             />
 
@@ -823,7 +900,7 @@ export const AIAssistantView = () => {
                                 className={`
                                     p-2.5 rounded-full mb-1 transition-all duration-200 ml-2 shrink-0
                                     ${input.trim() && !isLoading
-                                        ? 'bg-slate-900 dark:bg-white text-white dark:text-black hover:opacity-90 shadow-md'
+                                        ? (theme === 'happy' ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-md' : 'bg-slate-900 dark:bg-white text-white dark:text-black hover:opacity-90 shadow-md')
                                         : 'bg-transparent text-slate-400 cursor-not-allowed'
                                     }
                                 `}
@@ -847,19 +924,19 @@ export const AIAssistantView = () => {
                         animate={{ width: 400, opacity: 1 }}
                         exit={{ width: 0, opacity: 0 }}
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
-                        className="h-full border-l border-slate-200/50 dark:border-white/5 bg-slate-50/50 dark:bg-[#0D1117]/50 flex flex-col shrink-0 shadow-[-10px_0_30px_rgba(0,0,0,0.05)] z-20"
+                        className={`h-full border-l flex flex-col shrink-0 shadow-[-10px_0_30px_rgba(0,0,0,0.05)] z-20 ${activeConfig.inspector}`}
                     >
                         {/* Inspector Header */}
-                        <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200/50 dark:border-white/5">
+                        <div className={`h-14 flex items-center justify-between px-4 border-b ${activeConfig.header}`}>
                             <div className="flex items-center gap-2">
                                 <Layout className="w-4 h-4 text-emerald-500" />
-                                <h3 className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Inspector</h3>
+                                <h3 className={`text-xs font-bold uppercase tracking-widest ${theme === 'happy' ? 'text-stone-600' : 'text-slate-600 dark:text-slate-300'}`}>Inspector</h3>
                             </div>
                             <div className="flex items-center gap-1">
-                                <button onClick={() => setActiveArtifact(null)} className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-md text-slate-400">
+                                <button onClick={() => setActiveArtifact(null)} className={`p-1.5 rounded-md transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}>
                                     <X className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => setIsInspectorOpen(false)} className="p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-md text-slate-400">
+                                <button onClick={() => setIsInspectorOpen(false)} className={`p-1.5 rounded-md transition-colors ${activeConfig.buttonHover} ${activeConfig.textMuted}`}>
                                     <PanelRightClose className="w-4 h-4" />
                                 </button>
                             </div>
@@ -867,10 +944,10 @@ export const AIAssistantView = () => {
 
                         {/* Artifact Content */}
                         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                            <div className="bg-white dark:bg-[#161B22] rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden">
+                            <div className={`rounded-2xl border overflow-hidden ${activeConfig.artifactCard}`}>
                                 {/* Title Bar */}
-                                <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] flex items-center justify-between">
-                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate pr-2" title={activeArtifact.title}>
+                                <div className={`px-4 py-3 border-b flex items-center justify-between ${activeConfig.artifactHeader}`}>
+                                    <span className={`text-xs font-bold truncate pr-2 ${theme === 'happy' ? 'text-stone-700' : 'text-slate-700 dark:text-slate-200'}`} title={activeArtifact.title}>
                                         {activeArtifact.title}
                                     </span>
                                     <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wider
@@ -884,9 +961,9 @@ export const AIAssistantView = () => {
                                 </div>
 
                                 {/* Body */}
-                                <div className="p-1 bg-slate-100/50 dark:bg-black/20 min-h-[300px]">
+                                <div className={`p-1 min-h-[300px] ${theme === 'happy' ? 'bg-[#FFFBF2]' : (theme === 'dark' ? 'bg-black/20' : 'bg-slate-100/50')}`}>
                                     {(activeArtifact.type === 'chart' && activeArtifact.data?.option) || activeArtifact.type === 'image_base64' ? (
-                                        <div className="h-[500px] w-full relative bg-white dark:bg-[#0D1117] rounded-xl border border-slate-200 dark:border-white/5 flex flex-col overflow-hidden">
+                                        <div className={`h-[500px] w-full relative rounded-xl border flex flex-col overflow-hidden ${activeConfig.chartBox}`}>
                                             <ChartRenderer
                                                 data={transformArtifactToNormalizedData(activeArtifact)}
                                                 height="100%"
@@ -904,14 +981,14 @@ export const AIAssistantView = () => {
                             </div>
 
                             {/* Info Box */}
-                            <div className="mt-4 p-4 rounded-xl bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/10">
+                            <div className={`mt-4 p-4 rounded-xl border ${theme === 'happy' ? 'bg-orange-50/50 border-orange-100' : 'bg-blue-50/50 dark:bg-blue-500/5 border-blue-100 dark:border-blue-500/10'}`}>
                                 <div className="flex gap-3">
-                                    <div className="p-1.5 bg-blue-100 dark:bg-blue-500/20 rounded-lg h-fit text-blue-600 dark:text-blue-400">
+                                    <div className={`p-1.5 rounded-lg h-fit ${theme === 'happy' ? 'bg-orange-100 text-orange-500' : 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400'}`}>
                                         <Lightbulb className="w-4 h-4" />
                                     </div>
                                     <div>
-                                        <h4 className="text-xs font-bold text-blue-700 dark:text-blue-300 mb-1">Context Awareness</h4>
-                                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                                        <h4 className={`text-xs font-bold mb-1 ${theme === 'happy' ? 'text-orange-700' : 'text-blue-700 dark:text-blue-300'}`}>Context Awareness</h4>
+                                        <p className={`text-[11px] leading-relaxed ${theme === 'happy' ? 'text-stone-600' : 'text-slate-600 dark:text-slate-400'}`}>
                                             The AI generated this artifact based on your query about "{input || 'data analysis'}". You can ask follow-up questions to refine this view.
                                         </p>
                                     </div>

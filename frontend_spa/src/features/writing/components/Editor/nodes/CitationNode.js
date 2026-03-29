@@ -18,13 +18,27 @@ export class CitationNode extends TextNode {
 
   createDOM(config) {
     const dom = super.createDOM(config);
-    // Styling khusus sitasi (misal: background abu-abu tipis saat hover)
-    dom.style.backgroundColor = 'rgba(0, 0, 255, 0.05)';
-    dom.style.borderRadius = '4px';
-    dom.style.padding = '2px 4px';
-    dom.style.cursor = 'pointer';
-    dom.title = 'Citation (Click to edit)';
+    const theme = config.theme;
+    const themeClass = theme.citation || '';
+
+    // Selalu sertakan 'lexical-citation' agar plugin tooltip bisa mendeteksinya
+    dom.className = `${themeClass} lexical-citation`.trim();
+
+    dom.title = 'Citation (Click to view details)';
     return dom;
+  }
+
+  updateDOM(prevNode, dom, config) {
+    const isUpdated = super.updateDOM(prevNode, dom, config);
+    const theme = config.theme;
+    const themeClass = theme.citation || '';
+    const fullClass = `${themeClass} lexical-citation`.trim();
+
+    if (dom.className !== fullClass) {
+      dom.className = fullClass;
+    }
+
+    return isUpdated;
   }
 
   static importJSON(serializedNode) {

@@ -1,18 +1,74 @@
-import React, { useState } from 'react'
-
-import { Loader2, Table2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { Loader2, AlertCircle, ArrowRight, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { useThemeStore } from '@/store/themeStore'
 import { cn } from '@/lib/utils'
 
 interface Step4Props {
-    data: any // The Blueprint
-    onComplete: (generatedData: any[], generatedVariables: any[]) => void
+    data: any
+    onComplete: (data: any[], vars: any[]) => void
 }
 
 export const Step4Preview = ({ data, onComplete }: Step4Props) => {
-    const [isLoading, setIsLoading] = useState(false)
+    const { theme } = useThemeStore()
+
+    const themeStyles = {
+        light: {
+            title: "from-blue-600 to-indigo-600",
+            textMuted: "text-slate-500",
+            textMain: "text-slate-800",
+            container: "bg-slate-50 border-slate-200",
+            tableHeader: "bg-slate-100 border-slate-200 text-slate-600",
+            tableRow: "border-slate-200 hover:bg-slate-100/50",
+            tableCell: "text-slate-700",
+            badgeSafe: "bg-emerald-100 text-emerald-700",
+            badgeWarn: "bg-amber-100 text-amber-700",
+            cardAction: "bg-emerald-50 border-emerald-200",
+            btnSubmit: "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20",
+            btnRegen: "bg-white border-slate-200 text-slate-600 hover:bg-slate-50",
+            loaderGradient: "from-blue-500 to-indigo-500",
+            errorBox: "bg-rose-50 border-rose-200"
+        },
+        dark: {
+            title: "from-cyan-400 to-blue-500",
+            textMuted: "text-slate-400",
+            textMain: "text-slate-200",
+            container: "bg-secondary/20 border-border/50",
+            tableHeader: "bg-secondary/50 border-white/10 text-slate-300",
+            tableRow: "border-white/5 hover:bg-white/5",
+            tableCell: "text-slate-300",
+            badgeSafe: "bg-emerald-500/20 text-emerald-400",
+            badgeWarn: "bg-yellow-500/20 text-yellow-400",
+            cardAction: "bg-emerald-500/5 border-emerald-500/20",
+            btnSubmit: "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20",
+            btnRegen: "bg-secondary/30 text-slate-300 hover:bg-secondary/50 border-white/10",
+            loaderGradient: "from-cyan-500 to-blue-500",
+            errorBox: "bg-red-500/10 border-red-500/20"
+        },
+        happy: {
+            title: "from-rose-500 to-orange-500",
+            textMuted: "text-orange-600/70",
+            textMain: "text-stone-800",
+            container: "bg-white/60 border-orange-200",
+            tableHeader: "bg-orange-100/50 border-orange-200 text-orange-800",
+            tableRow: "border-orange-100 hover:bg-orange-50",
+            tableCell: "text-stone-700",
+            badgeSafe: "bg-emerald-100 text-emerald-700",
+            badgeWarn: "bg-amber-100 text-amber-700",
+            cardAction: "bg-emerald-50 border-emerald-200",
+            btnSubmit: "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20",
+            btnRegen: "bg-white border-orange-200 text-orange-600 hover:bg-orange-50",
+            loaderGradient: "from-orange-400 to-rose-400",
+            errorBox: "bg-rose-50 border-rose-200"
+        }
+    }[theme || 'dark']
+
+    const activeConfig = themeStyles
+
+    const [isLoading, setIsLoading] = useState(true)
     const [previewData, setPreviewData] = useState<any[] | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const [generatedMeta, setGeneratedMeta] = useState<any>(null)
+    const [stats, setStats] = useState<any>(null)
 
     const handleGeneratePreview = async () => {
         setIsLoading(true)
@@ -28,169 +84,149 @@ export const Step4Preview = ({ data, onComplete }: Step4Props) => {
 
             if (result.status === 'success') {
                 setPreviewData(result.data)
-                setGeneratedMeta(result.meta)
+                setStats(result.meta)
             } else {
                 setError(result.message || 'Failed to generate data')
             }
-        } catch (err) {
-            setError('Connection failed. Make sure the backend is running.')
+        } catch (err: any) {
+            console.error("Preview generation failed:", err)
+            setError(err.message || 'Connection failed. Make sure the backend is running.')
         } finally {
             setIsLoading(false)
         }
     }
 
-    // Auto-generate on mount (first time)
-    React.useEffect(() => {
-        if (!previewData && !isLoading) {
-            handleGeneratePreview()
-        }
+    useEffect(() => {
+        handleGeneratePreview()
     }, [])
 
     const handleConfirm = () => {
-        if (previewData) {
-            // Need to convert blueprint variables to Store Variable format
-            // But for now, we pass the raw data and let the Store/Wrapper handle it or we do basic mapping here
-
-            // Basic mapping of columns to variables
-            // Ideally backend returns variable definitions too, but for now we infer from headers
-            const headers = generatedMeta?.columns || Object.keys(previewData[0] || {})
-
-            // Create proper variable definitions for the store
-            const newVariables = headers.map((header: string) => ({
-                id: header,
-                name: header,
-                label: header.replace(/_/g, ' ').toUpperCase(),
-                type: 'numeric', // Default
-                role: 'input',
-                measure: 'scale'
-            }))
-
-            onComplete(previewData, newVariables)
-        }
+        if (!previewData) return
+        onComplete(previewData, data.variables || [])
     }
 
     return (
         <div className="space-y-6 h-full flex flex-col animate-in fade-in zoom-in-95 duration-300">
-            <div className="space-y-2 shrink-0">
-                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+            <div className="shrink-0 space-y-2">
+                <h3 className={cn("text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r", activeConfig.title)}>
                     Preview & Validation
                 </h3>
-                <p className="text-muted-foreground text-sm">
-                    Review your generated data before loading it into the workspace.
+                <p className={cn("text-sm", activeConfig.textMuted)}>
+                    Verifikasi sampel data sebelum di-load ke dalam tabel utama.
                 </p>
             </div>
 
-            <div className="flex-1 bg-secondary/20 rounded-xl border border-border/50 overflow-hidden relative flex flex-col">
+            {/* Main Preview Area */}
+            <div className={cn("flex-1 rounded-xl border overflow-hidden relative flex flex-col backdrop-blur-sm", activeConfig.container)}>
                 {isLoading ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10">
-                        <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                            <p className="text-sm font-medium text-muted-foreground">Simulating data points...</p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/50 backdrop-blur-sm z-10">
+                        <div className="relative">
+                            <div className={cn("absolute inset-0 bg-gradient-to-r rounded-full blur-xl opacity-50 animate-pulse", activeConfig.loaderGradient)} />
+                            <Loader2 className={cn("w-12 h-12 animate-spin relative z-10", activeConfig.title.includes('cyan') ? 'text-cyan-400' : activeConfig.title.includes('emerald') ? 'text-emerald-500' : 'text-orange-500')} />
                         </div>
+                        <p className={cn("text-sm font-medium mt-4 animate-pulse", activeConfig.textMain)}>Generating data pattern...</p>
+                        <p className={cn("text-xs opacity-60 mt-1", activeConfig.textMuted)}>Menyesuaikan {data.variables?.length || 0} variabel untuk {data.sample_size || 60} baris.</p>
                     </div>
                 ) : error ? (
-                    <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
-                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-full flex items-center justify-center mb-4">
-                            <AlertCircle className="w-6 h-6" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                        <div className={cn("w-16 h-16 rounded-full flex items-center justify-center mb-4", activeConfig.errorBox)}>
+                            <AlertCircle className="w-8 h-8 text-rose-500" />
                         </div>
-                        <h4 className="font-bold text-lg mb-2">Generation Failed</h4>
-                        <p className="text-muted-foreground text-sm max-w-md mb-6">{error}</p>
+                        <p className="text-rose-500 font-bold mb-2">Generation Failed</p>
+                        <p className={cn("text-sm max-w-md", activeConfig.textMuted)}>{error}</p>
                         <button
                             onClick={handleGeneratePreview}
-                            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90"
+                            className={cn("mt-6 px-4 py-2 border rounded-lg transition-colors flex items-center gap-2 text-sm", activeConfig.btnRegen)}
                         >
-                            Try Again
+                            <RefreshCw className="w-4 h-4" /> Coba Lagi
                         </button>
                     </div>
                 ) : previewData ? (
-                    <div className="flex-1 overflow-auto custom-scrollbar">
-                        <table className="w-full text-sm">
-                            <thead className="bg-secondary/40 sticky top-0 z-10">
-                                <tr>
-                                    {generatedMeta?.columns?.map((col: string) => (
-                                        <th key={col} className="px-4 py-3 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider whitespace-nowrap border-b border-border/50">
-                                            {col}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/30">
-                                {previewData.slice(0, 15).map((row, i) => (
-                                    <tr key={i} className="hover:bg-muted/30 transition-colors">
-                                        {generatedMeta?.columns?.map((col: string) => (
-                                            <td key={col} className="px-4 py-2.5 whitespace-nowrap text-foreground/80 font-mono text-xs">
-                                                {row[col]}
-                                            </td>
+                    <>
+                        <div className="flex-1 overflow-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse text-sm">
+                                <thead className={cn("sticky top-0 z-10 backdrop-blur-md", activeConfig.tableHeader)}>
+                                    <tr>
+                                        <th className="p-3 border-b border-r font-semibold w-16 text-center">No</th>
+                                        {(data.variables || []).map((v: any) => (
+                                            <th key={v.id} className="p-3 border-b border-r font-semibold">
+                                                <div className="flex flex-col">
+                                                    <span>{v.name}</span>
+                                                    <span className="text-[10px] opacity-60 font-normal">{v.type}</span>
+                                                </div>
+                                            </th>
                                         ))}
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {previewData.length > 15 && (
-                            <div className="p-3 text-center text-xs text-muted-foreground border-t border-border/50 bg-secondary/5">
-                                Showing first 15 of {previewData.length} records
-                            </div>
-                        )}
-                    </div>
+                                </thead>
+                                <tbody>
+                                    {previewData.slice(0, 10).map((row, idx) => (
+                                        <tr key={idx} className={cn("border-b transition-colors", activeConfig.tableRow)}>
+                                            <td className={cn("p-2 border-r text-center opacity-50", activeConfig.tableCell)}>{idx + 1}</td>
+                                            {(data.variables || []).map((v: any) => {
+                                                const val = row[v.name]
+                                                return (
+                                                    <td key={v.id} className={cn("p-2 border-r", activeConfig.tableCell)}>
+                                                        {typeof val === 'number' && v.type !== 'likert' ? val.toFixed(2) : val}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {previewData.length > 10 && (
+                                <div className={cn("text-center p-3 text-xs border-b border-dashed", activeConfig.textMuted, activeConfig.tableRow)}>
+                                    ... menampilkan 10 dari {previewData.length} baris data ...
+                                </div>
+                            )}
+                        </div>
+                    </>
                 ) : null}
             </div>
 
+            {/* Action Card */}
             {!isLoading && !error && previewData && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
-                    {/* Anti-Revisi Report */}
-                    <div className="bg-card border border-border/50 rounded-xl p-4 shadow-sm space-y-3">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-purple-500/10 text-purple-600 p-1.5 rounded-lg">
-                                <CheckCircle2 className="w-4 h-4" />
-                            </div>
-                            <h4 className="font-bold text-sm bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">
-                                Laporan Kesehatan Data (Anti-Revisi)
-                            </h4>
-                        </div>
-
-                        <div className="space-y-2 text-xs">
-                            <div className="flex items-center justify-between p-2 bg-secondary/30 rounded-lg">
-                                <span className="text-muted-foreground">Normalitas (Shapiro-Wilk)</span>
+                    <div className={cn("border rounded-xl p-4 flex flex-col justify-center items-start gap-2", activeConfig.container)}>
+                        <h4 className={cn("text-xs font-bold uppercase tracking-wider", activeConfig.textMuted)}>Data Quality Report</h4>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                            <span className={cn("px-2 py-1 rounded text-[10px] font-medium flex items-center gap-1", activeConfig.badgeSafe)}>
+                                <CheckCircle2 className="w-3 h-3" /> N = {previewData.length} Berhasil
+                            </span>
+                            {stats?.normality && (
                                 <span className={cn(
-                                    "font-bold px-1.5 py-0.5 rounded",
-                                    (generatedMeta?.report?.normality || []).some((n: any) => !n.is_normal)
-                                        ? "bg-yellow-500/10 text-yellow-600"
-                                        : "bg-green-500/10 text-green-600"
+                                    "px-2 py-1 rounded text-[10px] font-medium transition-colors",
+                                    stats.normality > 0.05 ? activeConfig.badgeSafe : activeConfig.badgeWarn
                                 )}>
-                                    {(generatedMeta?.report?.normality || []).some((n: any) => !n.is_normal) ? 'Terdistribusi Data Riil' : 'Logis'}
+                                    Distribusi {stats.normality > 0.05 ? 'Normal' : 'Non-Normal'}
                                 </span>
-                            </div>
-
-                            <div className="flex items-center justify-between p-2 bg-secondary/30 rounded-lg">
-                                <span className="text-muted-foreground">Reliabilitas (Alpha)</span>
-                                <span className="font-bold bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded">
-                                    High (Cronbach &gt; 0.7)
+                            )}
+                            {stats?.reliability && (
+                                <span className={cn(
+                                    "px-2 py-1 rounded text-[10px] font-medium transition-colors",
+                                    stats.reliability > 0.7 ? activeConfig.badgeSafe : activeConfig.badgeWarn
+                                )}>
+                                    Alpha = {stats.reliability.toFixed(2)}
                                 </span>
-                            </div>
+                            )}
                         </div>
                     </div>
 
-                    {/* Action Card */}
-                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col justify-between items-end">
-                        <div className="flex flex-col items-end text-right mb-2">
-                            <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">Siap Analisis</p>
-                            <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70 max-w-[200px]">
-                                Data telah lolos uji logika dasar dan struktur.
-                            </p>
-                        </div>
-                        <div className="flex gap-2">
+                    <div className={cn("border rounded-xl p-4 flex flex-col justify-center items-end gap-3", activeConfig.cardAction)}>
+                        <p className={cn("text-xs font-medium text-right max-w-[200px]", activeConfig.textMuted)}>Data siap digunakan. Silakan simpan untuk mulai analisis.</p>
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={handleGeneratePreview}
-                                className="px-4 py-2 bg-secondary text-foreground rounded-lg text-xs font-bold hover:bg-secondary/80 transition-colors"
+                                className={cn("px-4 py-2 border rounded-lg transition-colors flex items-center gap-2 text-xs font-medium hover:bg-slate-100", activeConfig.btnRegen)}
                             >
-                                Regenerate
+                                <RefreshCw className="w-3.5 h-3.5" /> Re-Generate
                             </button>
                             <button
                                 onClick={handleConfirm}
-                                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 text-xs"
+                                className={cn("px-5 py-2 font-bold rounded-lg shadow-lg transition-all flex items-center gap-2 text-xs", activeConfig.btnSubmit)}
                             >
                                 Simpan ke Data View
-                                <Table2 className="w-3.5 h-3.5" />
+                                <ArrowRight className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -199,4 +235,3 @@ export const Step4Preview = ({ data, onComplete }: Step4Props) => {
         </div>
     )
 }
-

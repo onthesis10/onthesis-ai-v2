@@ -17,17 +17,20 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 entryFileNames: 'spa-bundle.js',
-                chunkFileNames: 'spa-[name].js',
+                chunkFileNames: 'spa-[name]-[hash].js',
                 assetFileNames: (assetInfo) => {
                     if (assetInfo.name && assetInfo.name.endsWith('.css')) {
                         return 'spa-style.css';
                     }
-                    return 'spa-[name].[ext]';
+                    return 'spa-[name]-[hash].[ext]';
                 }
             }
         }
     },
     server: {
+        headers: {
+            'Cross-Origin-Opener-Policy': 'same-origin-allow-popups'
+        },
         proxy: {
             '/api': {
                 target: 'http://127.0.0.1:5000',

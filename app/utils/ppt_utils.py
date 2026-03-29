@@ -7,8 +7,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
-from litellm import completion
-from app.utils.ai_utils import AVAILABLE_MODELS, clean_json_output
+from app.utils.ai_utils import AVAILABLE_MODELS, clean_json_output, safe_completion
 
 def generate_slide_content(text_content, num_slides=10):
     """

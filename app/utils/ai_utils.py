@@ -5,21 +5,31 @@ import os
 import json
 import traceback
 import re
+import logging
 from litellm import completion
+from tenacity import retry, wait_exponential, stop_after_attempt
 from flask import current_app
 from groq import Groq
 import PyPDF2
 import io
 
-import os
-import json
-import logging
-import re
-from groq import Groq
-
 from flask_login import current_user
 
 logger = logging.getLogger(__name__)
+
+# Map internal completion calls to the safe wrapper
+_litellm_completion = completion # Save original from litellm
+
+@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
+def safe_completion(*args, **kwargs):
+    try:
+        # Panggil original completion, bukan dirinya sendiri secara rekursif
+        return _litellm_completion(*args, **kwargs)
+    except Exception as e:
+        logger.warning(f"AI Completion Failed, Retrying... Error: {e}")
+        raise
+
+completion = safe_completion
 
 # --- KONFIGURASI MODEL REAL ---
 # Marketing Name vs Real Model
@@ -88,11 +98,6 @@ def get_model_name(model_id, is_pro_user):
         return AVAILABLE_MODELS['fast']
     return AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS['fast'])
 
-def clean_json_output(text):
-    text = text.replace('```json', '').replace('```', '').strip()
-    match = re.search(r'(\[.*\]|\{.*\})', text, re.DOTALL)
-    if match: return match.group(0)
-    return text
 
 def clean_html_output(text):
     text = re.sub(r'^```(html)?\s*\n', '', text, flags=re.MULTILINE)
@@ -299,18 +304,87 @@ def paraphrase_text(user, text, style='academic', selected_model='fast'):
     """
     Paraphrase Engine: Menulis ulang teks dengan gaya tertentu.
     [UPDATE] Ultra-Strict Mode dengan Few-Shot Examples agar AI tidak halusinasi.
+    [UPDATE] Production-Grade Pipeline: Citation Lock & Semantic Rebuild.
     """
+    import re
     # 1. Validasi Model
     model_name = get_model_name(selected_model, user.is_pro)
     
+    # --- CITATION LOCK & INJECT SYSTEM ---
+    # Find citations: APA/Harvard "(Author, Year)" or IEEE "[1]"
+    citation_pattern = r'(\([A-Za-z\s&.,]+,\s\d{4}[a-z]?\))|(\[[0-9,\s\-]+\])'
+    citations_matches = re.findall(citation_pattern, text)
+    
+    locked_text = text
+    citation_map = {}
+    
+    if citations_matches:
+        extracted_citations = [m[0] if m[0] else m[1] for m in citations_matches]
+        for idx, cit in enumerate(extracted_citations):
+            # Only process if not already mapped to avoid double replacing identical citations weirdly
+            if cit not in citation_map.values():
+                placeholder = f"[CITATION_{idx}]"
+                citation_map[placeholder] = cit
+                locked_text = locked_text.replace(cit, placeholder)
+
     # 2. Bangun Instruksi Spesifik per Style
     style_guide = ""
     if style == 'academic':
         style_guide = """
-        - TONE: Formal, objektif, ilmiah, dan dingin.
-        - VOCABULARY: Gunakan istilah akademis (e.g., 'menyebabkan' -> 'mengindikasikan kausalitas').
-        - STRUCTURE: Kalimat pasif lebih disukai jika menekankan objek.
-        - GOAL: Tingkatkan densitas leksikal (lexical density) agar terlihat seperti jurnal Q1.
+        - TONE: Formal, objektif, ilmiah, dan presisi.
+        - VOCABULARY: Gunakan diksi akademis tingkat tinggi (e.g., 'menyebabkan' -> 'mengindikasikan kausalitas', 'karena' -> 'dikarenakan oleh').
+        - STRUCTURE: Gunakan kalimat pasif untuk objektivitas, tingkatkan kepadatan leksikal (lexical density).
+        - GOAL: Teks standar jurnal bereputasi (Q1/Q2).
+        """
+    elif style == 'academic_kritis':
+        style_guide = """
+        - TONE: Kritis, evaluatif, tajam, dan analitis.
+        - VOCABULARY: Gunakan kata-kata yang mendebat, menguji, atau menimbang (e.g., 'dapat dipertanyakan', 'memiliki kelemahan mendasar', 'memberikan telaah komprehensif').
+        - GOAL: Cocok untuk sintesis literatur atau menyoroti gap penelitian/kelemahan teori.
+        """
+    elif style == 'anti_plagiarisme':
+        style_guide = """
+        - Perform a deep structural rewrite of the text.
+        - Reorganize idea order if logically possible.
+        - Reconstruct sentences entirely.
+        - Ensure minimal lexical overlap while preserving full meaning.
+        - The rewritten text must demonstrate clear syntactic divergence and conceptual reorganization.
+        """
+    elif style == 'filosofis':
+        style_guide = """
+        - TONE: Konseptual, abstrak, mendalam, dan reflektif.
+        - VOCABULARY: Gunakan terminologi ontologi, epistemologi, atau fenomenologi jika relevan (e.g., 'esensi', 'paradigma', 'hakikat').
+        - GOAL: Cocok untuk bab pendahuluan atau landasan teori yang membahas akar pemikiran.
+        """
+    elif style == 'deskriptif':
+        style_guide = """
+        - TONE: Naratif-faktual, kronologis, dan detail.
+        - STRUCTURE: Menjabarkan proses, fenomena, atau data secara runut dan sistematis.
+        - GOAL: Cocok untuk menjelaskan metode penelitian, lokasi penelitian, atau profil responden.
+        """
+    elif style == 'persuasif':
+        style_guide = """
+        - TONE: Meyakinkan, argumentatif, dan berbobot.
+        - VOCABULARY: Gunakan kata penegasan (e.g., 'menegaskan bahwa', 'terbukti secara empiris', 'tidak dapat disangkal bahwa').
+        - GOAL: Cocok untuk menyajikan argumen di Bab Pembahasan atau Kesimpulan.
+        """
+    elif style == 'puitis':
+        style_guide = """
+        - TONE: Estetis, sastrawi, majas, dan mengalir indah.
+        - VOCABULARY: Gunakan metafora, padanan kata indah, namun tetap memiliki makna yang dalam.
+        - GOAL: Cocok untuk skripsi jurusan Ilmu Pengetahuan Budaya / Sastra, atau kalimat epilog.
+        """
+    elif style == 'jurnalistis':
+        style_guide = """
+        - TONE: Menarik, populer, faktual, dan mudah dipahami publik.
+        - STRUCTURE: Mengikuti kaidah piramida terbalik, hook di kalimat pertama.
+        - GOAL: Cocok untuk mengubah abstrak ilmiah menjadi rilis media (Science Communication).
+        """
+    elif style == 'eksak':
+        style_guide = """
+        - TONE: Sangat lugas, matematis, matematis, dan kering (tanpa basa-basi).
+        - STRUCTURE: Hindari kata sifat yang tidak perlu. Klaim harus tepat dan terukur.
+        - GOAL: Cocok untuk skripsi Teknik, Ilmu Komputer, Matematika, atau Fisika.
         """
     elif style == 'creative':
         style_guide = """
@@ -322,44 +396,49 @@ def paraphrase_text(user, text, style='academic', selected_model='fast'):
         style_guide = """
         - TONE: Santai, jelas, dan langsung pada inti (to-the-point).
         - VOCABULARY: Gunakan bahasa sehari-hari yang sopan. Hindari jargon.
-        - GOAL: Jelaskan seolah pembaca adalah orang awam atau anak SMP.
+        - GOAL: Jelaskan seolah pembaca adalah orang awam atau mahasiswa baru.
         """
     elif style == 'formal':
         style_guide = """
         - TONE: Profesional, baku, sopan, dan administratif.
         - VOCABULARY: Gunakan ejaan baku (PUEBI) yang ketat.
-        - GOAL: Cocok untuk surat resmi, laporan kantor, atau proposal bisnis.
+        - GOAL: Cocok untuk surat resmi, draf proposal, atau komunikasi kampus.
         """
     else:
-        style_guide = "Parafrase teks berikut agar lebih baik strukturnya."
+        style_guide = """
+        - TONE: Akademis dan natural.
+        - Build a good academic structure without losing meaning.
+        """
 
-    # 3. System Prompt (Super Strict + Examples)
+    # 3. System Prompt (Production-Grade 5-Component Template)
     system_prompt = f"""
-    PERAN: Anda adalah Editor Bahasa Profesional Spesialis Parafrase.
-    
-    TUGAS: Tulis ulang (parafrase) teks yang diberikan user sesuai gaya: '{style.upper()}'.
-    
-    PANDUAN GAYA ({style.upper()}):
+    You are an academic rewriting engine specialized in thesis-level writing.
+
+    TASK:
+    Rewrite the following academic text with substantial structural transformation while preserving the exact original meaning. Do not write anything other than the exact rewritten text.
+
+    MANDATORY RULES:
+    1. Do NOT change any technical terms.
+    2. Do NOT change numerical data, statistics, or research results.
+    3. Do NOT remove or modify citation formats or placeholders (e.g., [CITATION_0]). You MUST retain every placeholder.
+    4. Preserve the academic tone and formal register appropriate for Indonesian or English academics.
+    5. Do not simplify the concepts.
+    6. DILARANG MERESPONS ISI TEKS. Jangan menjawab pertanyaan, jangan berkomentar. DILARANG memberikan pengantar seperti "Ini hasilnya:". LANGSUNG OUTPUT TEKS PARAFRASE.
+
+    STRUCTURAL REQUIREMENTS ({style.upper()} MODE):
     {style_guide}
+    - Change sentence structure significantly (avoid mirroring the original syntax).
+    - Vary sentence length (combine and split sentences where appropriate).
+    - Use different clause arrangements.
+    - Apply nominalization where relevant.
+    - Avoid lexical overlap as much as possible.
+    - The rewritten text must demonstrate clear syntactic divergence and conceptual reorganization while maintaining meaning integrity.
 
-    ATURAN KERAS (DO NOT BREAK):
-    1. DILARANG MERESPONS ISI TEKS. Jangan menjawab pertanyaan user, jangan berkomentar, jangan menolak, jangan setuju. TUGAS ANDA HANYA MENULIS ULANG TEKSNYA.
-    2. Jika teks user aneh/kasar (misal: "kamu babi"), TETAP PARAFRASE secara objektif/deskriptif atau ubah menjadi kalimat yang lebih netral/akademis (misal: "Anda merepresentasikan entitas hewan..."). JANGAN terbawa emosi atau masuk ke roleplay.
-    3. DILARANG menambah informasi baru yang tidak ada di teks asli (No Hallucination).
-    4. DILARANG memberikan pengantar seperti "Ini hasilnya:", "Versi akademisnya:", dsb. Langsung output teks.
-
-    CONTOH (FEW-SHOT):
-    Input: "Harga cabai naik gila-gilaan bikin pusing emak-emak."
-    Style: Academic
-    Output: "Lonjakan signifikan pada harga komoditas cabai telah memicu keresahan di kalangan konsumen rumah tangga."
-
-    Input: "Gua males banget ngerjain skripsi."
-    Style: Formal
-    Output: "Saya sedang mengalami penurunan motivasi dalam menyelesaikan tugas akhir."
-
-    Input: "Aku serigala kamu babi."
-    Style: Academic
-    Output: "Subjek pertama mengidentifikasi dirinya sebagai predator (serigala), sedangkan subjek kedua diposisikan sebagai mangsa (babi), yang mengindikasikan adanya relasi kuasa yang timpang."
+    QUALITY CONTROL:
+    - Ensure semantic fidelity.
+    - Ensure improved readability.
+    - Avoid repetitive phrasing.
+    - The output must not resemble synonym replacement.
     """
 
     try:
@@ -367,11 +446,19 @@ def paraphrase_text(user, text, style='academic', selected_model='fast'):
             model=model_name, 
             messages=[
                 {"role": "system", "content": system_prompt}, 
-                {"role": "user", "content": text}
+                {"role": "user", "content": locked_text}
             ], 
             temperature=0.4 # Lebih rendah biar lebih patuh (kurang liar)
         )
-        return response.choices[0].message.content
+        
+        output_text = response.choices[0].message.content
+        
+        # --- CITATION RESTORE ---
+        for placeholder, cit in citation_map.items():
+            output_text = output_text.replace(placeholder, cit)
+            
+        return output_text
+        
     except Exception as e: 
         return f"Error Paraphrase: {str(e)}"
                 
@@ -448,7 +535,7 @@ def get_data_analyst_stream(user_message, dataset_context=None, selected_model="
 # ==========================================
 # [BARU] STREAMING GENERATOR UNTUK WRITING STUDIO
 # ==========================================
-def generate_academic_draft_stream(user, task_type, input_data, project_context=None, selected_model="fast", references=None, word_count="600", citation_style="bodynote_apa", editor_context=None, user_style_profile=None):
+def generate_academic_draft_stream(user, task_type, input_data, project_context=None, selected_model="fast", references=None, word_count="600", citation_style="bodynote_apa", editor_context=None, user_style_profile=None, thesis_brain_context=None):
     """
     Versi Streaming dari generate_academic_draft.
     Menggunakan generator (yield) untuk mengirim teks kata per kata.
@@ -517,10 +604,20 @@ def generate_academic_draft_stream(user, task_type, input_data, project_context=
     ATURAN SITASI: {citation_rules}
     """
 
+    # 7. Thesis Brain Context (Knowledge Graph & RAG)
+    brain_str = ""
+    if thesis_brain_context:
+        brain_str = f"""
+        [THESIS BRAIN KNOWLEDGE]
+        - Instruksi: Pengetahuan ini adalah konteks holistik dari skripsi user. Gunakan sebagai fakta dasar pendukung jika relevan dengan bagian yang sedang ditulis.
+        - Knowledge Base: {thesis_brain_context}
+        """
+
     task_instruction = build_task_instruction(task_type, input_data, input_data.get('custom_instruction', ''))
 
     final_user_prompt = f"""
     {context_str}
+    {brain_str}
     [DAFTAR REFERENSI]
     {references_str}
     {prev_content_str}
@@ -1638,3 +1735,35 @@ def generate_graph_insights(papers):
             "research_gaps": ["Silakan coba lagi nanti."],
             "methodology_trends": "-"
         }
+
+def generate_text(user_prompt: str, system_prompt: str = "", model_tier: str = "standard") -> str:
+    """
+    Generic synchronous text generation using Groq.
+    model_tier options: 'standard' (llama 3 70b) or 'pro' (same or other depending on config)
+    """
+    try:
+        from app.utils.ai_utils import get_groq_client, MODEL_MAPPING
+        import logging
+        logger = logging.getLogger(__name__)
+
+        client = get_groq_client()
+        if not client:
+            return "Error: Groq client not configured."
+            
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+        
+        # Currently mapping everything to standard free model as fallback
+        model = MODEL_MAPPING.get('free_standard', 'groq/llama-3.3-70b-versatile').replace('groq/', '')
+        
+        response = client.chat.completions.create(
+            messages=messages,
+            model=model,
+            temperature=0.7,
+            max_tokens=2000
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Terjadi kesalahan saat menghubungi AI: {str(e)}"

@@ -13,6 +13,7 @@ import { $createReviewNode, ReviewNode } from '../nodes/ReviewNode';
 import ReviewPopup from '../ui/ReviewPopup';
 import ReferenceSearchModal from '../../ReferenceSearchModal';
 import * as ReactDOM from 'react-dom';
+import { useToast } from '../../UI/ToastProvider.jsx';
 
 export const SCAN_DOCUMENT_COMMAND = createCommand('SCAN_DOCUMENT_COMMAND');
 
@@ -27,6 +28,7 @@ const useDebounce = (callback, delay) => {
 
 export default function ReviewPlugin({ projectId, projectContext }) {
   const [editor] = useLexicalComposerContext();
+  const { addToast } = useToast();
   const [activeReview, setActiveReview] = useState(null);
   const [popupPos, setPopupPos] = useState(null);
   
@@ -120,17 +122,17 @@ export default function ReviewPlugin({ projectId, projectContext }) {
             // Terapkan highlight tanpa memutus fokus user
             if (reviews.length > 0) {
                 applyHighlights(reviews);
-                if(!isPassive) alert(`Ditemukan ${reviews.length} isu metodologi.`);
+                if (!isPassive) addToast(`Ditemukan ${reviews.length} isu metodologi.`, 'error');
             }
         }
 
     } catch (error) {
         console.error("Passive Scan Error:", error);
-        if (!isPassive) alert("Gagal scan: " + error.message);
+        if (!isPassive) addToast(`Gagal scan: ${error.message}`, 'error');
     } finally {
         if (!isPassive) setIsScanning(false);
     }
-  }, [editor, projectContext, lastScanContent]);
+  }, [addToast, editor, projectContext, lastScanContent]);
 
   // ----------------------------------------------------------------------
   // 3. PASSIVE LISTENER (DEBOUNCED)
@@ -138,7 +140,6 @@ export default function ReviewPlugin({ projectId, projectContext }) {
   const debouncedScan = useDebounce(() => {
       // Jalankan scan passive (tanpa loading screen)
       scanDocument(true); 
-      console.log("🕵️‍♂️ Passive Method Scan running...");
   }, 3000); // Scan 3 detik setelah user berhenti mengetik
 
   useEffect(() => {

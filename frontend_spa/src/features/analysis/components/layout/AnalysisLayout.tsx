@@ -6,37 +6,8 @@ import { useAnalysisStore } from '../../store/useAnalysisStore'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export const AnalysisLayout = ({ children }: { children: React.ReactNode }) => {
-    const { theme } = useAnalysisStore() // Get theme from store
-
-    // Global Theme Listener & Initializer
-    useEffect(() => {
-        const root = window.document.documentElement
-        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-
-        const applyTheme = () => {
-            const systemDark = mediaQuery.matches
-            const isDark = theme === 'dark' || (theme === 'system' && systemDark)
-
-            if (isDark) {
-                root.classList.add('dark')
-            } else {
-                root.classList.remove('dark')
-            }
-        }
-
-        // Apply theme immediately on mount and when theme changes
-        applyTheme()
-
-        // Listen for system changes (only relevant if theme is 'system')
-        const handleSystemChange = () => {
-            if (theme === 'system') {
-                applyTheme()
-            }
-        }
-
-        mediaQuery.addEventListener('change', handleSystemChange)
-        return () => mediaQuery.removeEventListener('change', handleSystemChange)
-    }, [theme])
+    // Theme is handled globally by useThemeStore and App.tsx
+    // We just need to ensure the layout structure supports the content
 
     return (
         <div className="flex h-screen w-screen bg-background overflow-hidden relative">
@@ -66,3 +37,4 @@ export const AnalysisLayout = ({ children }: { children: React.ReactNode }) => {
         </div>
     )
 }
+

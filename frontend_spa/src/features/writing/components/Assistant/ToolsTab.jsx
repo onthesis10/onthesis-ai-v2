@@ -3,13 +3,13 @@
 import React, { useState } from 'react';
 import { 
     ScanLine, CheckCircle2, XCircle, AlertTriangle, 
-    RefreshCw, ArrowRight, Terminal
+    RefreshCw, ArrowRight, Terminal, Sparkles
 } from 'lucide-react';
 
 import { useTheme } from '../../context/ThemeContext.jsx'; 
 import CitationGraph from './CitationGraph'; 
 
-export default function ToolsTab({ projectId, onInsert, onUpdateStyle, projectData, getEditorContent }) {
+export default function ToolsTab({ projectId, onInsert, onUpdateStyle, projectData, getEditorContent, onRunAI, status, streamData, error }) {
     const { theme } = useTheme(); 
     const [auditResult, setAuditResult] = useState(null);
     const [isAuditing, setIsAuditing] = useState(false);
@@ -63,6 +63,15 @@ export default function ToolsTab({ projectId, onInsert, onUpdateStyle, projectDa
         }, 800);
     };
 
+    const runAgentCitationAudit = () => {
+        if (!onRunAI) return;
+        const htmlContent = getEditorContent ? getEditorContent() : '';
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = htmlContent;
+        const text = tempDiv.textContent || tempDiv.innerText || "";
+        onRunAI('validate_citations', { input_text: text });
+    };
+
     return (
         // CONTAINER: Full Width, No Padding di Root, Border Left Tipis
         <div className="h-full flex flex-col bg-white dark:bg-[#18181B] text-gray-800 dark:text-[#CCCCCC] font-sans text-[13px] border-l border-gray-200 dark:border-white/5 transition-colors duration-300">
@@ -88,7 +97,7 @@ export default function ToolsTab({ projectId, onInsert, onUpdateStyle, projectDa
                 {/* SECTION 2: REFERENCE AUDIT */}
                 <div className="border-b border-gray-200 dark:border-white/5">
                     <div className="px-4 py-2 bg-gray-50 dark:bg-[#202023] flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Reference Audit</span>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Reference Audit (Local Heuristic)</span>
                         {auditResult && (
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-sm ${
                                 auditResult.score === 100 
@@ -101,10 +110,38 @@ export default function ToolsTab({ projectId, onInsert, onUpdateStyle, projectDa
                     </div>
                     
                     <div className="p-4">
+                        <div className="mb-3 rounded-sm border border-blue-200/70 dark:border-blue-500/20 bg-blue-50/70 dark:bg-blue-500/10 p-2.5">
+                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                <Sparkles size={11} />
+                                Agent Citation Check
+                            </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-blue-700/80 dark:text-blue-200/80">
+                                Jalankan pemeriksaan sitasi berbasis agent untuk mendapat analisis yang lebih kontekstual. Audit lokal di bawah tetap tersedia sebagai cek cepat di browser.
+                            </p>
+                            <button
+                                onClick={runAgentCitationAudit}
+                                disabled={status === 'streaming'}
+                                className="mt-3 w-full py-2 bg-slate-900 hover:bg-black dark:bg-blue-600 dark:hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-medium rounded-sm transition-all flex items-center justify-center gap-2"
+                            >
+                                <Sparkles size={12} />
+                                {status === 'streaming' ? 'Agent sedang memeriksa...' : 'Run Agent Citation Check'}
+                            </button>
+                            {error && (
+                                <div className="mt-2 text-[10px] text-red-600 dark:text-red-300">
+                                    {error}
+                                </div>
+                            )}
+                            {streamData && status !== 'streaming' && (
+                                <div className="mt-2 max-h-[160px] overflow-y-auto custom-scrollbar rounded-sm border border-black/5 dark:border-white/10 bg-white/80 dark:bg-black/20 p-2 text-[11px] leading-relaxed text-gray-700 dark:text-gray-200 whitespace-pre-wrap">
+                                    {streamData}
+                                </div>
+                            )}
+                        </div>
+
                         {!auditResult ? (
                             <div className="text-center py-2">
                                 <p className="text-[11px] text-gray-400 mb-3 leading-relaxed">
-                                    Cek konsistensi sitasi dalam teks vs daftar pustaka.
+                                    Cek cepat konsistensi sitasi dalam teks vs daftar pustaka langsung di browser.
                                 </p>
                                 <button 
                                     onClick={runCitationAudit}

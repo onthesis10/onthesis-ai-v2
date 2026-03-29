@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { BarChart2, MessageSquare, ArrowRightCircle } from 'lucide-react';
+import { useToast } from '../../../UI/ToastProvider.jsx';
 
 /**
  * DataInterpreter Component
  * Menangani input data mentah user (Angka/Teks) dan logic pemilihan sub-bab.
  */
 const DataInterpreter = ({ onGenerate, isGenerating, onStop }) => {
+    const { addToast } = useToast();
     // Mode Data: Kuantitatif (Angka) vs Kualitatif (Teks)
     const [dataMode, setDataMode] = useState('kuantitatif');
     
@@ -18,7 +20,7 @@ const DataInterpreter = ({ onGenerate, isGenerating, onStop }) => {
 
     const handleSubmit = () => {
         if (!dataSummary.trim()) {
-            alert("Mohon masukkan ringkasan data hasil penelitian Anda.");
+            addToast("Mohon masukkan ringkasan data hasil penelitian Anda.", 'error');
             return;
         }
 

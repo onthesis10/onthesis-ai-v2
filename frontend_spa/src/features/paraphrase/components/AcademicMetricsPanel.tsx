@@ -131,7 +131,7 @@ const AcademicMetricsPanel: React.FC<AcademicMetricsPanelProps> = ({ metrics, is
                 <div className={`rounded-lg p-3 flex flex-col justify-between transition-colors ${cardClasses}`}>
                     <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2">
-                            <div className="p-1 rounded bg-sky-500/10 text-sky-500">
+                            <div className={`p-1 rounded ${metrics['citation integrity'] === 'N/A' ? 'bg-slate-500/10 text-slate-500' : metrics['citation integrity'] === 'Failed' ? 'bg-red-500/10 text-red-500' : metrics['citation integrity'] === 'Warning' ? 'bg-amber-500/10 text-amber-500' : 'bg-sky-500/10 text-sky-500'}`}>
                                 <CheckCircle2 className="w-3 h-3" />
                             </div>
                             <span className={`text-[10px] font-bold uppercase ${labelColor}`}>Citations</span>
@@ -139,8 +139,8 @@ const AcademicMetricsPanel: React.FC<AcademicMetricsPanelProps> = ({ metrics, is
                         <InfoTooltip text="Referensi kutipan terjaga." isHappy={isHappy} />
                     </div>
                     <div className="mt-2">
-                        <span className="text-sm font-outfit font-bold text-sky-400">
-                            Protected
+                        <span className={`text-sm font-outfit font-bold ${metrics['citation integrity'] === 'N/A' ? 'text-slate-400' : metrics['citation integrity'] === 'Failed' ? 'text-red-500' : metrics['citation integrity'] === 'Warning' ? 'text-amber-500' : 'text-sky-400'}`}>
+                            {metrics['citation integrity']}
                         </span>
                     </div>
                 </div>

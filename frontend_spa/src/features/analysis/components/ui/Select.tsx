@@ -30,25 +30,43 @@ export const Select = ({
     label
 }: SelectProps) => {
     const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+    const containerRef = useRef<HTMLButtonElement>(null);
+    const [coords, setCoords] = useState({ top: 'auto' as string | number, bottom: 'auto' as string | number, left: 0, width: 0 });
+    const [position, setPosition] = useState<'bottom' | 'top'>('bottom');
 
-    // Update coordinates when opening
+    // Update koordinat posisi dropdown dengan presisi
     useEffect(() => {
         if (isOpen && containerRef.current) {
             const updatePosition = () => {
                 const rect = containerRef.current?.getBoundingClientRect();
                 if (rect) {
+                    const spaceBelow = window.innerHeight - rect.bottom;
+                    const spaceAbove = rect.top;
+
+                    // Asumsi tinggi tiap opsi ~36px + padding container 8px
+                    const dropdownHeight = Math.min(options.length * 36 + 8, 240);
+                    const GAP = 6; // Jarak presisi antara tombol dan dropdown
+
+                    let isTop = false;
+                    // Jika ruang di bawah kurang, dan ruang di atas lebih luas, buka ke atas
+                    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+                        isTop = true;
+                    }
+
+                    setPosition(isTop ? 'top' : 'bottom');
+
                     setCoords({
-                        top: rect.bottom + window.scrollY + 8,
-                        left: rect.left + window.scrollX,
+                        top: isTop ? 'auto' : rect.bottom + GAP,
+                        bottom: isTop ? window.innerHeight - rect.top + GAP : 'auto',
+                        left: rect.left,
                         width: rect.width
                     });
                 }
             };
 
             updatePosition();
-            window.addEventListener('resize', updatePosition);
+            // Gunakan passive listener untuk performa scroll yang lebih baik
+            window.addEventListener('resize', updatePosition, { passive: true });
             window.addEventListener('scroll', updatePosition, true);
 
             return () => {
@@ -56,7 +74,7 @@ export const Select = ({
                 window.removeEventListener('scroll', updatePosition, true);
             };
         }
-    }, [isOpen]);
+    }, [isOpen, options.length]);
 
     const selectedOption = options.find(opt => opt.value === value);
 
@@ -73,7 +91,7 @@ export const Select = ({
             )}
 
             <button
-                ref={containerRef as any}
+                ref={containerRef}
                 type="button"
                 onClick={toggleOpen}
                 disabled={disabled}
@@ -96,36 +114,62 @@ export const Select = ({
                 </div>
                 <ChevronDown
                     className={cn(
-                        "w-4 h-4 text-muted-foreground transition-transform duration-200",
+                        "w-4 h-4 text-muted-foreground transition-transform duration-300 ease-out",
                         isOpen && "rotate-180"
                     )}
                 />
             </button>
 
-            {createPortal(
+            {/* Portal untuk Dropdown */}
+            {typeof window !== 'undefined' && createPortal(
                 <AnimatePresence>
                     {isOpen && (
                         <>
-                            {/* Backdrop for click outside */}
+                            {/* Backdrop transparan */}
                             <div
                                 className="fixed inset-0 z-[9998] bg-transparent"
                                 onClick={() => setIsOpen(false)}
                             />
 
+                            {/* Injeksi CSS Custom Scrollbar yang presisi */}
+                            <style>{`
+                                .precise-scrollbar::-webkit-scrollbar {
+                                    width: 5px;
+                                }
+                                .precise-scrollbar::-webkit-scrollbar-track {
+                                    background: transparent;
+                                    margin: 4px; /* Memberi jarak agar scrollbar tidak mentok ujung */
+                                }
+                                .precise-scrollbar::-webkit-scrollbar-thumb {
+                                    background: rgba(156, 163, 175, 0.4);
+                                    border-radius: 10px;
+                                }
+                                .precise-scrollbar::-webkit-scrollbar-thumb:hover {
+                                    background: rgba(156, 163, 175, 0.7);
+                                }
+                                /* Dukungan untuk Firefox */
+                                .precise-scrollbar {
+                                    scrollbar-width: thin;
+                                    scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+                                }
+                            `}</style>
+
                             <motion.div
-                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                initial={{ opacity: 0, y: position === 'bottom' ? -10 : 10, scale: 0.98 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                transition={{ duration: 0.15 }}
+                                exit={{ opacity: 0, y: position === 'bottom' ? -10 : 10, scale: 0.98 }}
+                                transition={{ duration: 0.2, ease: "easeOut" }}
                                 style={{
                                     top: coords.top,
+                                    bottom: coords.bottom,
                                     left: coords.left,
                                     width: coords.width,
-                                    position: 'absolute'
+                                    position: 'fixed'
                                 }}
-                                className="z-[9999] bg-popover border border-border/50 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar backdrop-blur-xl"
+                                className="z-[9999] bg-popover/95 border border-border/50 rounded-xl shadow-xl overflow-hidden backdrop-blur-xl"
                             >
-                                <div className="p-1 space-y-0.5">
+                                {/* Wrapper khusus untuk scrollbar */}
+                                <div className="max-h-[240px] overflow-y-auto precise-scrollbar p-1.5 space-y-0.5">
                                     {options.map((option) => (
                                         <button
                                             key={option.value}
@@ -135,9 +179,9 @@ export const Select = ({
                                                 setIsOpen(false);
                                             }}
                                             className={cn(
-                                                "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors",
+                                                "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all duration-150",
                                                 option.value === value
-                                                    ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 font-medium"
+                                                    ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 font-semibold"
                                                     : "text-foreground/80 hover:bg-secondary hover:text-foreground"
                                             )}
                                         >
@@ -146,7 +190,13 @@ export const Select = ({
                                                 <span>{option.label}</span>
                                             </div>
                                             {option.value === value && (
-                                                <Check className="w-3.5 h-3.5 text-cyan-500" />
+                                                <motion.div
+                                                    initial={{ scale: 0 }}
+                                                    animate={{ scale: 1 }}
+                                                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                                                >
+                                                    <Check className="w-4 h-4 text-cyan-500" />
+                                                </motion.div>
                                             )}
                                         </button>
                                     ))}

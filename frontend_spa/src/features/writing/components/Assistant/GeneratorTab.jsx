@@ -12,7 +12,7 @@ const GeneratorTab = (props) => {
     // Kita passing semua props (seperti triggerToast, user data, dll)
     // langsung ke Orchestrator.
     return (
-        <div className="h-full w-full bg-slate-900">
+        <div className="h-full w-full bg-transparent">
             <GeneratorOrchestrator {...props} />
         </div>
     );

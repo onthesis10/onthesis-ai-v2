@@ -9,16 +9,58 @@ logger = logging.getLogger(__name__)
 
 try:
     from sentence_transformers import SentenceTransformer
-    embedder = SentenceTransformer('all-MiniLM-L6-v2')
-    HAS_SEMANTIC = True
 except ImportError:
-    embedder = None
-    HAS_SEMANTIC = False
-    logger.warning("⚠️ Sentence-Transformers not found. RAG running in Keyword Mode.")
+    SentenceTransformer = None
+    logger.warning("Sentence-Transformers not found. RAG running in Keyword Mode.")
+
+embedder = None
+_embedder_load_attempted = False
+_gevent_warning_emitted = False
+
+
+def _is_gevent_runtime() -> bool:
+    try:
+        from gevent import monkey
+        return monkey.is_module_patched("socket")
+    except Exception:
+        return False
+
+
+def _get_embedder():
+    global embedder, _embedder_load_attempted, _gevent_warning_emitted
+
+    if embedder is not None:
+        return embedder
+
+    if _is_gevent_runtime():
+        if not _gevent_warning_emitted:
+            logger.warning("Semantic embedder disabled under gevent to avoid concurrent.futures LoopExit. RAG stays in Keyword Mode.")
+            _gevent_warning_emitted = True
+        return None
+
+    if _embedder_load_attempted:
+        return None
+
+    _embedder_load_attempted = True
+
+    if SentenceTransformer is None:
+        return None
+
+    try:
+        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        logger.info("Semantic embedder loaded successfully.")
+        return embedder
+    except Exception as exc:
+        logger.warning(f"Semantic embedder failed to load. RAG stays in Keyword Mode: {exc}")
+        return None
+
 
 
 class RagEngine:
-    """Retrieval engine with rerank, metadata filter, diversity scoring, and confidence output."""
+    """
+    Retrieval engine with rerank, metadata filters, diversity scoring,
+    and confidence output for academic context retrieval.
+    """
 
     def __init__(self, storage_path="instance/vector_store"):
         self.storage_path = storage_path
@@ -26,8 +68,9 @@ class RagEngine:
             os.makedirs(self.storage_path)
 
     def _get_embedding(self, text: str) -> List[float]:
-        if HAS_SEMANTIC and embedder:
-            return embedder.encode(text, convert_to_numpy=True).tolist()
+        active_embedder = _get_embedder()
+        if active_embedder:
+            return active_embedder.encode(text, convert_to_numpy=True).tolist()
         return []
 
     def _cosine_similarity(self, vec_a, vec_b):
@@ -44,7 +87,7 @@ class RagEngine:
         user_files = [f for f in os.listdir(self.storage_path) if f.startswith(f"{user_id}_")]
         for filename in user_files:
             try:
-                with open(os.path.join(self.storage_path, filename), 'r') as f:
+                with open(os.path.join(self.storage_path, filename), "r", encoding="utf-8") as f:
                     all_chunks.extend(json.load(f))
             except Exception:
                 continue
@@ -83,7 +126,7 @@ class RagEngine:
             return {"documents": [], "confidence": 0.0}
 
         scored_chunks = []
-        query_vec = self._get_embedding(query) if HAS_SEMANTIC else []
+        query_vec = self._get_embedding(query) if _get_embedder() else []
 
         for chunk in all_chunks:
             semantic = self._cosine_similarity(query_vec, chunk.get('vector', [])) if query_vec else 0.0
@@ -119,6 +162,7 @@ class RagEngine:
         return self.retrieve_with_confidence(query=query, user_id=user_id, k=k)["documents"]
 
     def index_document(self, doc_id: str, user_id: str, content: str, metadata: Dict = None):
+        """Indexes a document using paragraph-level chunking."""
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", content) if len(p.strip()) > 50]
         chunks = []
         for p in paragraphs:
@@ -132,6 +176,6 @@ class RagEngine:
             })
 
         filename = os.path.join(self.storage_path, f"{user_id}_{doc_id}.json")
-        with open(filename, 'w') as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(chunks, f)
         return len(chunks)

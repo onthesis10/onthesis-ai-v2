@@ -2,7 +2,7 @@ from typing import Dict, Any, Generator, Union
 from app.orchestrator.modes.base import BaseMode
 from app.orchestrator.schema import RequestContext, ExecutionPlan, Step
 from app.orchestrator.registry import ModeRegistry
-from litellm import completion
+from app.utils.ai_utils import safe_completion as completion
 import json
 
 

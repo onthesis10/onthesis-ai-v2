@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { CheckCircle, Lightbulb, ClipboardList, ArrowRightCircle } from 'lucide-react';
+import { useToast } from '../../../UI/ToastProvider.jsx';
 
 /**
  * ClosingInput Component
  * Menangani input untuk Bab 5 (Kesimpulan & Saran).
  */
 const ClosingInput = ({ onGenerate, isGenerating, onStop }) => {
+    const { addToast } = useToast();
     // Sub-Task: Kesimpulan vs Saran
     const [activeSection, setActiveSection] = useState('kesimpulan');
     
@@ -16,7 +18,7 @@ const ClosingInput = ({ onGenerate, isGenerating, onStop }) => {
     const handleSubmit = () => {
         // Validasi
         if (activeSection === 'kesimpulan' && !keyFindings.trim()) {
-            alert("Mohon isi poin-poin temuan utama dari Bab 4 agar kesimpulan akurat.");
+            addToast("Mohon isi poin-poin temuan utama dari Bab 4 agar kesimpulan akurat.", 'error');
             return;
         }
 

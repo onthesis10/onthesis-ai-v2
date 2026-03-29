@@ -6,13 +6,15 @@ interface OnThesisLogoProps {
     variant?: 'animated' | 'static' | 'icon-only' | 'animated-icon';
     showText?: boolean;
     onClick?: () => void;
+    style?: React.CSSProperties;
 }
 
 export function OnThesisLogo({
     className,
     variant = 'animated',
     showText = true,
-    onClick
+    onClick,
+    style
 }: OnThesisLogoProps) {
     const isIconOnly = variant === 'icon-only' || variant === 'animated-icon';
     const effectiveShowText = isIconOnly ? false : showText;
@@ -29,6 +31,7 @@ export function OnThesisLogo({
             className={cn("select-none", className)}
             onClick={onClick}
             style={{
+                ...style,
                 "--base1": "var(--ocean-1)",
                 "--base2": "var(--ocean-2)",
                 "--highlight": "var(--ocean-highlight)",

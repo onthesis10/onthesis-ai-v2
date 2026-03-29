@@ -1,3 +1,5 @@
+"""LEGACY MODULE — dataset-analysis agent, superseded by supervisor.py pipeline."""
+
 from typing import TypedDict, Annotated, List, Dict, Any, Union
 import os
 import pandas as pd

@@ -3,14 +3,16 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { $generateHtmlFromNodes } from "@lexical/html";
 
-export default function AutoSavePlugin({ 
-  projectId, 
-  onServerSave, 
+export default function AutoSavePlugin({
+  projectId,
+  onServerSave,
   isStreaming = false, // Prop untuk mendeteksi aktivitas AI
-  debounceTime = 2000 // Default 2 detik
+  debounceTime = 2000, // Default 2 detik
+  onUpdateSummary = null, // Sprint 2: fire-and-forget chapter summary update
+  activeChapterId = null, // Sprint 2: needed for summary trigger
 }) {
   const [editor] = useLexicalComposerContext();
-  
+
   // Refs untuk menyimpan state tanpa memicu re-render
   const lastContentRef = useRef(null);
   const saveTimerRef = useRef(null); // KITA PEGANG KENDALI TIMER DI SINI
@@ -20,7 +22,6 @@ export default function AutoSavePlugin({
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
-        console.log(`[AutoSave] Timer dibatalkan untuk project ${projectId} (Cleanup)`);
       }
     };
   }, [projectId]);
@@ -32,27 +33,31 @@ export default function AutoSavePlugin({
       if (isStreaming) return;
 
       const htmlString = $generateHtmlFromNodes(editor, null);
-      
+
       // Cek apakah konten benar-benar berubah untuk hemat request
       if (htmlString === lastContentRef.current) return;
-      
+
       // Panggil fungsi save dari parent (Context)
       if (onServerSave) {
-          onServerSave(htmlString);
-          lastContentRef.current = htmlString;
-          console.log(`[AutoSave] Saved project ${projectId} at ${new Date().toLocaleTimeString()}`);
+        onServerSave(htmlString);
+        lastContentRef.current = htmlString;
+
+        // Sprint 2: Fire-and-forget chapter summary update
+        if (onUpdateSummary && activeChapterId) {
+          onUpdateSummary(activeChapterId, htmlString);
+        }
       }
     });
-  }, [editor, isStreaming, onServerSave, projectId]);
+  }, [editor, isStreaming, onServerSave, projectId, onUpdateSummary, activeChapterId]);
 
   // Handler utama saat ada ketikan
   const onChange = (editorState) => {
     // 1. BLOKIR JIKA AI SEDANG MENULIS
     // Ini mencegah 'dirty read' saat teks sedang digenerate karakter per karakter.
     if (isStreaming) {
-        return;
+      return;
     }
-    
+
     // 2. RESET TIMER LAMA (Debounce Logic Manual)
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);

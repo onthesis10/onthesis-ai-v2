@@ -2,8 +2,10 @@ from flask import request, jsonify
 import pandas as pd
 from . import generator_bp
 from app.services.statistics_generator import StatisticsGenerator
+from app import limiter
 
 @generator_bp.route('/api/generate-data', methods=['POST'])
+@limiter.limit("13 per minute")
 def generate_data():
     """
     Endpoint to generate synthetic research data based on user configuration.

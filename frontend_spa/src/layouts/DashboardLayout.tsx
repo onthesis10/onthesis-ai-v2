@@ -112,11 +112,11 @@ export function DashboardLayout() {
                 {/* ─── 2. MAIN SCROLLABLE CONTENT ─── */}
                 <main className={cn(
                     "relative z-10 flex-1 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700",
-                    (location.pathname === '/chat' || location.pathname === '/citations' || location.pathname === '/paraphrase' || location.pathname.startsWith('/analysis')) && "overflow-hidden" // Disable main scroll for workspace features
+                    (location.pathname === '/chat' || location.pathname === '/citations' || location.pathname === '/paraphrase' || location.pathname.startsWith('/analysis') || location.pathname.startsWith('/writing')) && "overflow-hidden" // Disable main scroll for workspace features
                 )}>
                     <div className={cn(
                         "w-full min-h-full",
-                        (location.pathname === '/chat' || location.pathname === '/citations' || location.pathname === '/paraphrase' || location.pathname.startsWith('/analysis'))
+                        (location.pathname === '/chat' || location.pathname === '/citations' || location.pathname === '/paraphrase' || location.pathname.startsWith('/analysis') || location.pathname.startsWith('/writing'))
                             ? "h-full p-0"
                             : "max-w-[1600px] mx-auto px-6 lg:px-10 py-8 lg:py-10"
                     )}>

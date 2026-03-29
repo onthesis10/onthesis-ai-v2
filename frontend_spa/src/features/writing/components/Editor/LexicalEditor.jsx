@@ -11,7 +11,8 @@ import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin';
-import { $getRoot, $insertNodes, CLEAR_HISTORY_COMMAND } from 'lexical';
+import { $getRoot, $insertNodes, CLEAR_HISTORY_COMMAND, $getSelection, $isRangeSelection } from 'lexical';
+import { $isHeadingNode } from '@lexical/rich-text';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 
 // --- NODES ---
@@ -24,6 +25,10 @@ import { AutoLinkNode, LinkNode } from '@lexical/link';
 import { CitationNode } from './nodes/CitationNode'; // [NEW] Academic Node
 import { ImageNode } from './nodes/ImageNode';
 import { BibliographyNode } from './nodes/BibliographyNode';
+import { GhostTextNode } from './nodes/GhostTextNode'; // [Phase 2] Ghost Text
+import { ThesisParagraphNode } from './nodes/ThesisParagraphNode'; // [NEW]
+import { DiffBlockNode } from './nodes/DiffBlockNode.jsx'; // [Sprint 7] Inline diff
+import { ListMaxNode } from './nodes/ListMaxNode'; // [NEW] Custom List Styles
 // import { ReviewNode } from './nodes/ReviewNode'; // Uncomment jika file ada
 
 // --- UI & THEME ---
@@ -33,32 +38,44 @@ import Ribbon from './ribbon/Ribbon';
 // --- PLUGINS (LOGIC LAYERS) ---
 import ToolbarActionPlugin from './plugins/ToolbarActionPlugin'; // [NEW] Logic Ribbon
 import CitationPlugin from './plugins/CitationPlugin'; // [NEW] Logic Sitasi
-import AISlashPlugin from './plugins/AISlashPlugin'; 
-import ReviewPlugin from './plugins/ReviewPlugin'; 
-import AutoSavePlugin from './plugins/AutoSavePlugin'; 
-import FloatingToolbarPlugin from './plugins/FloatingToolbarPlugin'; 
+import CitationTooltipPlugin from './plugins/CitationTooltipPlugin'; // [NEW] Hover Tooltip Sitasi
+import AISlashPlugin from './plugins/AISlashPlugin';
+import ReviewPlugin from './plugins/ReviewPlugin';
+import AutoSavePlugin from './plugins/AutoSavePlugin';
+import FloatingToolbarPlugin from './plugins/FloatingToolbarPlugin';
+import CollabSyncPlugin from './plugins/CollabSyncPlugin';
+import ListMaxPlugin from './plugins/ListMaxPlugin'; // [NEW] Custom List Styles
+import CitationMentionPlugin from './plugins/CitationMentionPlugin'; // [NEW] @ Mention
+
+// --- PHASE 2 PLUGINS ---
+import GhostTextPlugin from './plugins/GhostTextPlugin';
+import CursorTrackPlugin from './plugins/CursorTrackPlugin';
+import DiagnosticPlugin from './plugins/DiagnosticPlugin';
+import { ParagraphIdPlugin } from './plugins/ParagraphIdPlugin'; // [NEW]
+import ParagraphNumberPlugin from './plugins/ParagraphNumberPlugin'; // [NEW] Sequential P-001 labels
+import WritingProgressPlugin from './plugins/WritingProgressPlugin';
 
 const ReviewNode = null; // Fallback jika ReviewNode belum ada
 
 // --- HELPER: AUTO LOAD CONTENT ---
-function AutoLoadPlugin({ content }) { 
-    const [editor] = useLexicalComposerContext(); 
-    const loadedRef = useRef(false); 
-    useEffect(() => { 
-        if (!content || loadedRef.current) return; 
-        editor.update(() => { 
-            const root = $getRoot(); 
-            if (root.getTextContent().trim() !== '') return; 
-            const parser = new DOMParser(); 
-            const dom = parser.parseFromString(content, 'text/html'); 
-            const nodes = $generateNodesFromDOM(editor, dom); 
-            root.clear(); 
-            $insertNodes(nodes); 
-            editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined); 
-        }); 
-        loadedRef.current = true; 
-    }, [content, editor]); 
-    return null; 
+function AutoLoadPlugin({ content }) {
+    const [editor] = useLexicalComposerContext();
+    const loadedRef = useRef(false);
+    useEffect(() => {
+        if (!content || loadedRef.current) return;
+        editor.update(() => {
+            const root = $getRoot();
+            if (root.getTextContent().trim() !== '') return;
+            const parser = new DOMParser();
+            const dom = parser.parseFromString(content, 'text/html');
+            const nodes = $generateNodesFromDOM(editor, dom);
+            root.clear();
+            $insertNodes(nodes);
+            editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined);
+        });
+        loadedRef.current = true;
+    }, [content, editor]);
+    return null;
 }
 
 // --- HELPER: EXPOSE REF ---
@@ -67,6 +84,8 @@ const EditorRefPlugin = ({ editorRef }) => {
     useEffect(() => {
         if (editorRef) {
             editorRef.current = {
+                // Sprint 5: Expose raw Lexical editor for EditorDiffBridge
+                _lexicalEditor: editor,
                 insertContent: (html) => {
                     editor.update(() => {
                         const parser = new DOMParser();
@@ -79,7 +98,94 @@ const EditorRefPlugin = ({ editorRef }) => {
                     let html = '';
                     editor.getEditorState().read(() => { html = $generateHtmlFromNodes(editor, null); });
                     return html;
-                }
+                },
+                getSelectionHtml: () => {
+                    let selectionText = '';
+                    editor.getEditorState().read(() => {
+                        const selection = editor.getEditorState()._selection;
+                        if (selection && selection.getTextContent) {
+                            selectionText = selection.getTextContent();
+                        }
+                    });
+                    return selectionText;
+                },
+                focus: () => {
+                    editor.focus();
+                },
+
+                getParagraphsWithIds: () => {
+                    const result = [];
+                    editor.getEditorState().read(() => {
+                        $getRoot().getChildren().forEach(node => {
+                            if (node instanceof ThesisParagraphNode) {
+                                result.push({
+                                    paraId: node.getParagraphId(),
+                                    content: node.getTextContent(),
+                                });
+                            }
+                        });
+                    });
+                    return result;
+                },
+
+                // ── NEW: Active Node Context for "Context is King" ──
+                getActiveNodeContext: () => {
+                    let context = null;
+                    editor.getEditorState().read(() => {
+                        const selection = $getSelection();
+                        if (!$isRangeSelection(selection)) return;
+
+                        const anchorNode = selection.anchor.getNode();
+                        // Walk up to find the top-level paragraph/block
+                        let blockNode = anchorNode;
+                        while (blockNode && blockNode.getParent() && blockNode.getParent() !== $getRoot()) {
+                            blockNode = blockNode.getParent();
+                        }
+                        if (!blockNode) return;
+
+                        const root = $getRoot();
+                        const children = root.getChildren();
+                        const blockIndex = children.indexOf(blockNode);
+
+                        // Current paragraph text
+                        const paragraphText = blockNode.getTextContent();
+
+                        // Previous paragraph
+                        const prevNode = blockIndex > 0 ? children[blockIndex - 1] : null;
+                        const prevParagraph = prevNode ? prevNode.getTextContent() : '';
+
+                        // Next paragraph
+                        const nextNode = blockIndex < children.length - 1 ? children[blockIndex + 1] : null;
+                        const nextParagraph = nextNode ? nextNode.getTextContent() : '';
+
+                        // Heading hierarchy: collect headings from start to current position
+                        const headingHierarchy = [];
+                        for (let i = 0; i <= blockIndex; i++) {
+                            const child = children[i];
+                            if ($isHeadingNode(child)) {
+                                headingHierarchy.push({
+                                    tag: child.getTag(),
+                                    text: child.getTextContent(),
+                                });
+                            }
+                        }
+
+                        // Word count of entire document
+                        const fullText = root.getTextContent();
+                        const wordCount = fullText.trim() ? fullText.trim().split(/\s+/).length : 0;
+
+                        context = {
+                            paragraphText,
+                            prevParagraph,
+                            nextParagraph,
+                            headingHierarchy,
+                            wordCount,
+                            blockIndex,
+                            totalBlocks: children.length,
+                        };
+                    });
+                    return context;
+                },
             };
         }
     }, [editor, editorRef]);
@@ -89,86 +195,112 @@ const EditorRefPlugin = ({ editorRef }) => {
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
-const LexicalEditor = forwardRef(({ 
-    initialContent, onChange, onSave, isStreaming, projectId, activeChapterId, projectContext 
+const LexicalEditor = forwardRef(({
+    initialContent, onChange, onSave, isStreaming, projectId, activeChapterId, projectContext,
+    references = [], // [NEW] Untuk @ Mention
+    hideRibbon = false,
+    onUpdateSummary = null, // Sprint 2: chapter summary trigger
 }, ref) => {
-  
-  const [isGhostWriting, setIsGhostWriting] = useState(false);
 
-  // 1. REGISTER NODES
-  const nodes = [ 
-    HeadingNode, QuoteNode, ListItemNode, ListNode, 
-    HorizontalRuleNode, CodeNode, CodeHighlightNode, 
-    TableNode, TableCellNode, TableRowNode, AutoLinkNode, LinkNode,
-    CitationNode, ImageNode, BibliographyNode, // Node khusus sitasi, gambar, dan daftar pustaka
-  ];
-  if (ReviewNode) nodes.push(ReviewNode);
+    const [isGhostWriting, setIsGhostWriting] = useState(false);
 
-  // 2. CONFIG
-  const initialConfig = {
-    namespace: 'OnThesisEditor',
-    theme: editorTheme,
-    nodes: nodes,
-    onError: (error) => console.error('[Lexical Error]:', error),
-  };
+    // 1. REGISTER NODES
+    const nodes = [
+        ThesisParagraphNode,
+        HeadingNode, QuoteNode, ListItemNode,
+        ListMaxNode,
+        {
+            replace: ListNode,
+            with: (node) => {
+                return new ListMaxNode(node.getListType(), node.getStart());
+            }
+        },
+        HorizontalRuleNode, CodeNode, CodeHighlightNode,
+        TableNode, TableCellNode, TableRowNode, AutoLinkNode, LinkNode,
+        CitationNode, ImageNode, BibliographyNode, // Node khusus sitasi, gambar, dan daftar pustaka
+        GhostTextNode, // [Phase 2] Ghost Text inline completion
+        DiffBlockNode, // [Sprint 7] Inline diff visualization
+    ];
+    if (ReviewNode) nodes.push(ReviewNode);
 
-  return (
-    <div className="relative w-full h-full flex flex-col bg-white dark:bg-[#1E1E1E] transition-colors duration-300 overflow-hidden">
-      
-      <LexicalComposer initialConfig={initialConfig}>
-        
-        {/* --- A. RIBBON (UI ONLY) --- */}
-        <div className="shrink-0 z-20 shadow-sm relative border-b border-gray-200 dark:border-white/5">
-            <Ribbon /> 
-        </div>
-        
-        {/* --- B. EDITOR CANVAS --- */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-white dark:bg-[#1E1E1E]">
-            <div className="min-h-full pb-32"> 
-                <RichTextPlugin
-                    contentEditable={
-                        <ContentEditable 
-                            className="outline-none px-12 py-10 max-w-none w-full prose prose-lg prose-slate dark:prose-invert focus:outline-none" 
-                            style={{ fontFamily: 'Times New Roman', fontSize: '12pt', lineHeight: '2.0' }} // Standard Skripsi
+    // 2. CONFIG
+    const initialConfig = {
+        namespace: 'OnThesisEditor',
+        theme: editorTheme,
+        nodes: nodes,
+        onError: (error) => console.error('[Lexical Error]:', error),
+    };
+
+    return (
+        <div className="relative w-full h-full flex flex-col bg-white dark:bg-[#1E1E1E] transition-colors duration-300 overflow-hidden">
+
+            <LexicalComposer initialConfig={initialConfig}>
+
+                {/* --- A. RIBBON (UI ONLY) --- */}
+                {!hideRibbon && (
+                    <div className="shrink-0 z-20 shadow-sm relative border-b border-gray-200 dark:border-white/5">
+                        <Ribbon />
+                    </div>
+                )}
+
+                {/* --- B. EDITOR CANVAS (CONTINUOUS VIEW) --- */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar relative px-12 py-10 bg-white dark:bg-[#1E1E1E]">
+                    <div className="min-h-full pb-32 max-w-4xl mx-auto">
+                        <RichTextPlugin
+                            contentEditable={
+                                <ContentEditable
+                                    className="outline-none w-full prose prose-lg prose-slate dark:prose-invert focus:outline-none"
+                                    style={{ fontFamily: 'serif', fontSize: '12pt', lineHeight: '2.0' }} // Standard Skripsi
+                                />
+                            }
+                            placeholder={
+                                <div className="absolute top-10 left-12 text-gray-300 dark:text-gray-600 pointer-events-none text-lg font-serif select-none mt-10">
+                                    Mulai menulis bab ini...
+                                </div>
+                            }
+                            ErrorBoundary={LexicalErrorBoundary}
                         />
-                    }
-                    placeholder={
-                        <div className="absolute top-10 left-12 text-gray-300 dark:text-gray-600 pointer-events-none text-lg font-serif select-none">
-                            Mulai menulis bab ini...
-                        </div>
-                    }
-                    ErrorBoundary={LexicalErrorBoundary}
-                />
-            </div>
+                    </div>
+                </div>
 
-            {/* --- C. CORE PLUGINS --- */}
-            <HistoryPlugin />
-            <AutoFocusPlugin />
-            <ListPlugin />
-            <HorizontalRulePlugin />
-            <OnChangePlugin onChange={(editorState, editor) => {
-                editorState.read(() => {
-                    if (onChange) onChange($generateHtmlFromNodes(editor, null));
-                });
-            }} ignoreSelectionChange />
-            
-            {/* --- D. CUSTOM LOGIC PLUGINS --- */}
-            <ToolbarActionPlugin /> {/* Menghubungkan Ribbon ke Editor */}
-            <CitationPlugin />      {/* Menghandle logic insert sitasi */}
-            
-            <AutoSavePlugin projectId={projectId} onServerSave={onSave} isStreaming={isStreaming || isGhostWriting} />
-            <AutoLoadPlugin content={initialContent} />
-            <EditorRefPlugin editorRef={ref} />
-            
-            {/* --- E. FEATURE PLUGINS --- */}
-            <AISlashPlugin projectId={projectId} />
-            <ReviewPlugin projectId={projectId} projectContext={projectContext} />
-            <FloatingToolbarPlugin onStateChange={setIsGhostWriting} />
-            
-        </div>
-      </LexicalComposer>
-    </div>
-  );
+                {/* --- C. CORE PLUGINS --- */}
+                <HistoryPlugin />
+                <AutoFocusPlugin />
+                <ListPlugin />
+                <ListMaxPlugin />
+                <HorizontalRulePlugin />
+                <OnChangePlugin onChange={(editorState, editor) => {
+                    editorState.read(() => {
+                        if (onChange) onChange($generateHtmlFromNodes(editor, null));
+                    });
+                }} ignoreSelectionChange />
+
+                {/* --- D. CUSTOM LOGIC PLUGINS --- */}
+                <ToolbarActionPlugin /> {/* Menghubungkan Ribbon ke Editor */}
+                <CitationPlugin />      {/* Menghandle logic insert sitasi */}
+                <CitationTooltipPlugin /> {/* Menampilkan popover saat sitasi diklik */}
+                <WritingProgressPlugin />
+
+                <AutoSavePlugin projectId={projectId} onServerSave={onSave} isStreaming={isStreaming || isGhostWriting} onUpdateSummary={onUpdateSummary} activeChapterId={activeChapterId} />
+                <AutoLoadPlugin content={initialContent} />
+                <EditorRefPlugin editorRef={ref} />
+
+                {/* --- E. FEATURE PLUGINS --- */}
+                <ParagraphIdPlugin />
+                <ParagraphNumberPlugin />
+                <AISlashPlugin projectId={projectId} />
+                <CitationMentionPlugin references={references} />
+                <ReviewPlugin projectId={projectId} projectContext={projectContext} />
+                <FloatingToolbarPlugin onStateChange={setIsGhostWriting} />
+                <CollabSyncPlugin documentId={activeChapterId || projectId || 'general_room'} />
+
+                {/* --- F. PHASE 2: INTELLIGENCE PLUGINS --- */}
+                <GhostTextPlugin isStreaming={isStreaming || isGhostWriting} />
+                <CursorTrackPlugin />
+                <DiagnosticPlugin />
+            </LexicalComposer >
+        </div >
+    );
 });
 
 export default LexicalEditor;

@@ -4,10 +4,62 @@
 
 import os
 import re
-import requests
+import logging
+import requests  # pyre-ignore
 import urllib.parse
-from concurrent.futures import ThreadPoolExecutor
-from .general_utils import make_api_request_with_retry
+from .general_utils import make_api_request_with_retry  # pyre-ignore
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_module_print(*args, **kwargs):
+    message = " ".join(str(part) for part in args)
+    safe_message = message.encode("ascii", "backslashreplace").decode("ascii")
+    logger.info(safe_message)
+
+
+print = _safe_module_print
+
+
+def _translate_query_to_english(query: str) -> str:
+    api_key = os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY")
+    if not api_key:
+        return query
+
+    prompt = (
+        "Translate this academic search query to English. "
+        "Return only the translated query, nothing else:\n"
+        f"{query}"
+    )
+
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+        translated = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
+        if translated.startswith('"') and translated.endswith('"'):
+            translated = translated[1:-1]
+        return translated or query
+    except Exception as exc:
+        logger.warning("Query translation failed, using original query: %s", exc)
+        return query
 
 def _parse_keywords(keywords_string):
     """
@@ -259,15 +311,27 @@ def search_pubmed(keywords, year=None, limit=10):
     return results
 
 # ==========================================
-# MAIN UNIFIED SEARCH (Threaded)
+# MAIN UNIFIED SEARCH (Gevent-safe sequential)
 # ==========================================
 def unified_search(query, sources=None, year=None, limit=10):
     """
-    Menjalankan pencarian terpadu ke berbagai sumber secara paralel.
+    Menjalankan pencarian terpadu ke berbagai sumber secara sequential.
     Menerima parameter 'limit' untuk menentukan jumlah hasil per sumber.
     """
+    logger.info(
+        "unified_search invoked: module=%s query=%r sources=%s year=%s limit=%s",
+        __file__,
+        query,
+        sources,
+        year,
+        limit,
+    )
     if not sources:
         sources = ['crossref', 'openalex', 'doaj'] 
+
+    original_query = query
+    english_query = _translate_query_to_english(query)
+    print(f"[TRANSLATE] \"{original_query}\" -> \"{english_query}\"")
 
     all_references = []
     
@@ -279,32 +343,38 @@ def unified_search(query, sources=None, year=None, limit=10):
         'eric': search_eric,
         'pubmed': search_pubmed,
     }
+    source_labels = {
+        'core': 'CORE',
+        'crossref': 'Crossref',
+        'openalex': 'OpenAlex',
+        'doaj': 'DOAJ',
+        'eric': 'ERIC',
+        'pubmed': 'PubMed',
+    }
+    selected_sources = {name: fn for name, fn in search_functions.items() if name in sources}
 
-    # Execute in Parallel
-    with ThreadPoolExecutor(max_workers=len(sources)) as executor:
-        future_to_source = {}
-        for source in sources:
-            if source in search_functions:
-                # Pass query, year, AND LIMIT to each function
-                future = executor.submit(search_functions[source], query, year, limit)
-                future_to_source[future] = source
-        
-        for future in future_to_source:
-            source = future_to_source[future]
-            try:
-                result_data = future.result()
-                if result_data:
-                    all_references.extend(result_data)
-            except Exception as exc:
-                print(f'❌ Error in {source}: {exc}')
+    # Execute sequentially (Gevent-safe, no ThreadPoolExecutor/as_completed)
+    for name, fn in selected_sources.items():
+        label = source_labels.get(name, name)
+        try:
+            logger.info(f"[SEARCH-{label}] Searching: {english_query}")
+            result_data = fn(english_query, year, limit) or []  # type: ignore
+            all_references.extend(result_data)
+            logger.info(f"[SEARCH-{label}] Found: {len(result_data)} results")
+        except Exception as exc:
+            logger.warning(f"[SEARCH-{label}] failed: {exc}")
+            continue
 
     # Deduplicate Results (Based on DOI or Title)
     unique_references = []
     seen_identifiers = set()
     
     for ref in all_references:
-        title_norm = re.sub(r'\W+', '', (ref.get('title') or '').lower())
-        identifier = ref.get('doi') or title_norm[:50] 
+        title_val = ref.get('title')
+        title_norm = re.sub(r'\W+', '', str(title_val if title_val else '').lower())
+        
+        doi_val = ref.get('doi')
+        identifier = str(doi_val) if doi_val else str(title_norm)[0:50]  # type: ignore
         
         if identifier and identifier not in seen_identifiers:
             unique_references.append(ref)
@@ -424,8 +494,8 @@ def _format_paper_data(item):
         except: pass
 
     # 2. Parsing Authors
-    authors = [a.get('author', {}).get('display_name') for a in item.get('authorships', []) if a.get('author', {}).get('display_name')]
-    authors_str = ", ".join(authors[:3])
+    authors = [str(a.get('author', {}).get('display_name')) for a in item.get('authorships', []) if a.get('author', {}).get('display_name')]
+    authors_str = ", ".join(authors[0:3]) # type: ignore
 
     # --- 3. AGGRESSIVE DOI PARSING (FIX UTAMA) ---
     clean_doi = ""

@@ -1,31 +1,54 @@
 // FILE: src/components/ProjectSidebar.jsx
+// Antigravity-style — Ultra clean, flat, functional. No visual noise.
 
 import React, { useState } from 'react';
-import { 
-    FolderOpen, Settings, Plus, FileText, BookOpen, Search, 
-    LayoutGrid, Quote, Copy, Crown, ChevronDown, Check
+import { createPortal } from 'react-dom';
+import {
+    ChevronDown, Check, Plus, FileText, BookOpen, Search,
+    Quote, Copy, Settings, History, Crown, Hash, Trash2,
+    Edit2, Compass, Library, FlaskConical, BarChart2, CheckCircle,
+    LayoutTemplate, X
 } from 'lucide-react';
 import ReferenceSearchModal from './ReferenceSearchModal.jsx';
 import ProjectSettingsModal from './ProjectSettingsModal.jsx';
+import RevisionTimeline from './RevisionTimeline.jsx';
 import { useToast } from './UI/ToastProvider.jsx';
-import { useProject } from '../context/ProjectContext.jsx'; 
+import { useProject } from '../context/ProjectContext.jsx';
+import { useThemeStore } from '@/store/themeStore';
 
 export default function ProjectSidebar({ onInsertCitation }) {
     const { addToast } = useToast();
-    const { 
-        project, projectsList, 
-        chapters = [], activeChapterId, changeActiveChapter, 
+    const {
+        project, projectsList,
+        chapters = [], activeChapterId, changeActiveChapter,
         loadProject, createNewProject, isSaving, isContentLoading,
-        addReference, isPro
+        addReference, isPro, createChapter, deleteChapter, renameChapter
     } = useProject();
 
+    const { theme } = useThemeStore();
+
     const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('structure'); 
+    const [activeTab, setActiveTab] = useState('structure');
     const [isRefModalOpen, setIsRefModalOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    
+    const [chapterToDelete, setChapterToDelete] = useState(null);
+    const [chapterToRename, setChapterToRename] = useState(null);
+    const [renameTitleInput, setRenameTitleInput] = useState('');
+
     const safeData = project || {};
 
+    // ── Dynamic Chapter Icons ──
+    const getChapterIcon = (title) => {
+        const t = (title || '').toLowerCase();
+        if (t.includes('pendahuluan')) return Compass;
+        if (t.includes('pustaka') || t.includes('teori')) return Library;
+        if (t.includes('metode') || t.includes('metodologi')) return FlaskConical;
+        if (t.includes('hasil') || t.includes('pembahasan') || t.includes('analisis')) return BarChart2;
+        if (t.includes('penutup') || t.includes('kesimpulan')) return CheckCircle;
+        return FileText;
+    };
+
+    // ── Bib utils (untouched logic) ──
     const getFormattedBib = (ref) => {
         if (ref.formatted_citation) return ref.formatted_citation;
         const authors = ref.author || "Anonim";
@@ -40,72 +63,86 @@ export default function ProjectSidebar({ onInsertCitation }) {
         if (addToast) addToast("Format Daftar Pustaka disalin!", "success");
     };
 
-    const handleAddReference = (newRef) => addReference(newRef); 
+    const handleAddReference = (newRef) => addReference(newRef);
     const displayedReferences = safeData.references ? [...safeData.references].reverse() : [];
 
-    // --- MAC STYLE HELPERS ---
-    const activeTabClass = "bg-white dark:bg-[#636366] text-black dark:text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]";
-    const inactiveTabClass = "text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white";
+    /* ─── THEME ─── */
+    const isDark = theme === 'dark';
+    const isHappy = theme === 'happy';
+
+    const c = {
+        // Text
+        label: isDark ? 'text-[#6B7280]' : isHappy ? 'text-stone-400' : 'text-[#9CA3AF]',
+        text: isDark ? 'text-[#D1D5DB]' : isHappy ? 'text-stone-700' : 'text-[#374151]',
+        textMuted: isDark ? 'text-[#4B5563]' : isHappy ? 'text-stone-400' : 'text-[#6B7280]',
+        // Backgrounds
+        activeBg: isDark ? 'bg-white/[0.08]' : isHappy ? 'bg-orange-50' : 'bg-[#F3F4F6]',
+        activeAccent: isDark ? 'text-cyan-400' : isHappy ? 'text-orange-500' : 'text-blue-600',
+        hoverBg: isDark ? 'hover:bg-white/[0.04]' : isHappy ? 'hover:bg-orange-50/50' : 'hover:bg-[#F9FAFB]',
+        // Segment
+        segBg: isDark ? 'bg-white/[0.04]' : isHappy ? 'bg-orange-50/40' : 'bg-[#F3F4F6]',
+        segActive: isDark ? 'bg-white/[0.08] text-white' : isHappy ? 'bg-white text-orange-600 shadow-sm' : 'bg-white text-[#111827] shadow-sm',
+        segInactive: isDark ? 'text-[#6B7280] hover:text-[#9CA3AF]' : isHappy ? 'text-stone-400 hover:text-stone-600' : 'text-[#9CA3AF] hover:text-[#6B7280]',
+        // Elements
+        border: isDark ? 'border-white/[0.06]' : isHappy ? 'border-orange-100/50' : 'border-[#E5E7EB]',
+        dropBg: isDark ? 'bg-[#1F2937]' : isHappy ? 'bg-white' : 'bg-white',
+        dropItem: isDark ? 'text-[#D1D5DB] hover:bg-white/[0.06]' : isHappy ? 'text-stone-600 hover:bg-orange-50' : 'text-[#374151] hover:bg-[#F3F4F6]',
+        dropActive: isDark ? 'bg-cyan-500/20 text-cyan-400' : isHappy ? 'bg-orange-100 text-orange-600' : 'bg-blue-50 text-blue-600',
+        refCard: isDark ? 'border-white/[0.06] hover:border-white/[0.12]' : isHappy ? 'border-orange-100 hover:border-orange-200' : 'border-[#E5E7EB] hover:border-[#D1D5DB]',
+        searchBtn: isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20' : isHappy ? 'bg-orange-50 text-orange-500 hover:bg-orange-100' : 'bg-blue-50 text-blue-600 hover:bg-blue-100',
+        createBtn: isDark ? 'text-cyan-400 hover:bg-white/[0.04]' : isHappy ? 'text-orange-500 hover:bg-orange-50' : 'text-blue-600 hover:bg-blue-50',
+    };
 
     return (
-        // CONTAINER: Background transparan karena parent (WritingStudioRoot) sudah punya Glass Effect
-        <div className="w-full flex flex-col h-full bg-transparent relative">
-            
-            {/* 1. PROJECT SELECTOR (Mac Style Dropdown) */}
-            <div className="mb-4 px-1">
-                <button 
+        <div className="w-full flex flex-col h-full bg-transparent relative select-none">
+
+            {/* ── 1. PROJECT SELECTOR — Flat, minimal ── */}
+            <div className="px-3 mb-3">
+                <button
                     onClick={() => setProjectDropdownOpen(!projectDropdownOpen)}
-                    className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-transparent hover:border-black/5 transition-all group relative"
+                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg ${c.hoverBg} transition-colors group`}
                 >
-                    {/* Icon Box */}
-                    <div className="w-9 h-9 rounded-lg bg-gradient-to-b from-blue-500 to-blue-600 flex items-center justify-center shrink-0 shadow-sm border border-blue-400/20">
-                        <FolderOpen size={15} className="text-white drop-shadow-sm" />
+                    <div className={`w-7 h-7 rounded-md flex items-center justify-center ${isDark ? 'bg-cyan-500/15 text-cyan-400' : isHappy ? 'bg-orange-100 text-orange-500' : 'bg-blue-50 text-blue-600'}`}>
+                        <LayoutTemplate size={14} />
                     </div>
-                    
-                    <div className="flex-1 text-left overflow-hidden">
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold tracking-wide flex items-center gap-2">
-                            PROJECT ACTIVE
-                            {isPro && <Crown size={10} className="text-blue-500" />}
-                            {isSaving && <span className="text-[9px] text-orange-500 font-normal animate-pulse">●</span>}
+                    <div className="flex-1 text-left min-w-0">
+                        <div className={`text-[10px] ${c.label} font-medium tracking-wide uppercase leading-none mb-0.5 flex items-center gap-1`}>
+                            Project
+                            {isPro && <Crown size={8} className="text-amber-400" />}
+                            {isSaving && <span className="text-[8px] text-amber-400 animate-pulse">●</span>}
                         </div>
-                        <div className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate pr-4 relative">
-                            {safeData.title || "Untitled Project"}
-                            <ChevronDown size={12} className="absolute right-0 top-1/2 -translate-y-1/2 opacity-50"/>
+                        <div className={`text-[12px] font-semibold ${c.text} truncate leading-tight`}>
+                            {safeData.title || "Untitled"}
                         </div>
                     </div>
+                    <ChevronDown size={12} className={`${c.textMuted} opacity-0 group-hover:opacity-100 transition-opacity`} />
                 </button>
-                
-                {/* DROPDOWN MENU */}
+
+                {/* DROPDOWN */}
                 {projectDropdownOpen && (
                     <>
-                        <div className="fixed inset-0 z-40" onClick={() => setProjectDropdownOpen(false)}/>
-                        <div className="absolute top-16 left-2 right-2 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-xl border border-gray-200/50 dark:border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 origin-top">
-                            <div className="max-h-[220px] overflow-y-auto custom-scrollbar p-1.5 space-y-0.5">
-                                <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Switch Project</div>
+                        <div className="fixed inset-0 z-40" onClick={() => setProjectDropdownOpen(false)} />
+                        <div className={`absolute top-14 left-3 right-3 ${c.dropBg} border ${c.border} rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 origin-top`}>
+                            <div className="max-h-[200px] overflow-y-auto custom-scrollbar p-1 space-y-0.5">
+                                <div className={`px-2 py-1 text-[9px] font-semibold ${c.label} uppercase tracking-wider`}>Switch</div>
                                 {projectsList && projectsList.length > 0 ? (
                                     projectsList.map(p => (
-                                        <button 
-                                            key={p.id} 
-                                            onClick={() => { loadProject(p.id); setProjectDropdownOpen(false); }} 
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center gap-2 transition-colors ${
-                                                project?.id === p.id 
-                                                ? 'bg-blue-500 text-white font-medium' 
-                                                : 'text-gray-700 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10'
-                                            }`}
+                                        <button
+                                            key={p.id}
+                                            onClick={() => { loadProject(p.id); setProjectDropdownOpen(false); }}
+                                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] flex items-center gap-2 transition-colors ${project?.id === p.id ? c.dropActive : c.dropItem}`}
                                         >
-                                            <FileText size={12} className={project?.id === p.id ? "text-white/80" : "opacity-50"}/>
+                                            <Hash size={10} className="opacity-40" />
                                             <span className="flex-1 truncate">{p.title || "Untitled"}</span>
-                                            {project?.id === p.id && <Check size={12} />}
+                                            {project?.id === p.id && <Check size={10} />}
                                         </button>
                                     ))
                                 ) : (
-                                    <div className="p-2 text-center text-xs text-gray-400">No other projects</div>
+                                    <div className={`p-2 text-center text-[10px] ${c.textMuted}`}>No other projects</div>
                                 )}
-                                
-                                <div className="h-px bg-gray-200 dark:bg-white/10 my-1"></div>
-                                
-                                <button onClick={() => { createNewProject(); setProjectDropdownOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium transition-colors">
-                                    <Plus size={14}/> Create New Project
+                                <div className={`h-px my-0.5 ${c.border}`}></div>
+                                <button onClick={() => { createNewProject(); setProjectDropdownOpen(false); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] ${c.createBtn} font-medium`}>
+                                    <Plus size={11} /> New Project
                                 </button>
                             </div>
                         </div>
@@ -113,108 +150,235 @@ export default function ProjectSidebar({ onInsertCitation }) {
                 )}
             </div>
 
-            {/* 2. TAB SWITCHER (Mac Segmented Control) */}
-            <div className="grid grid-cols-2 p-1 mx-1 bg-gray-200/50 dark:bg-white/10 rounded-lg mb-4">
-                <button 
-                    onClick={() => setActiveTab('structure')}
-                    className={`flex items-center justify-center gap-2 py-1.5 rounded-md text-[11px] font-medium transition-all ${activeTab === 'structure' ? activeTabClass : inactiveTabClass}`}
-                >
-                    <LayoutGrid size={13} /> Struktur
-                </button>
-                <button 
-                    onClick={() => setActiveTab('references')}
-                    className={`flex items-center justify-center gap-2 py-1.5 rounded-md text-[11px] font-medium transition-all ${activeTab === 'references' ? activeTabClass : inactiveTabClass}`}
-                >
-                    <BookOpen size={13} /> Referensi
-                </button>
+            {/* ── 2. TAB SWITCHER — Minimal segmented control ── */}
+            <div className={`flex p-0.5 mx-3 ${c.segBg} rounded-md mb-3`}>
+                {[
+                    { id: 'structure', label: 'Bab', icon: FileText },
+                    { id: 'references', label: 'Ref', icon: BookOpen },
+                    { id: 'history', label: 'Log', icon: History },
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex-1 flex items-center justify-center gap-1 py-1 rounded text-[10px] font-medium transition-all ${activeTab === tab.id ? c.segActive : c.segInactive}`}
+                    >
+                        <tab.icon size={11} />
+                        {tab.label}
+                    </button>
+                ))}
             </div>
 
-            {/* 3. CONTENT AREA */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-1 pb-4">
-                
-                {/* TAB 1: CHAPTERS */}
+            {/* ── 3. CONTENT ── */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-4">
+
+                {/* CHAPTERS */}
                 {activeTab === 'structure' && (
-                    <div className="space-y-0.5">
-                        {chapters.map((chapter) => (
-                            <button
-                                key={chapter.id}
-                                onClick={() => changeActiveChapter(chapter.id)}
-                                disabled={isContentLoading}
-                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all group ${
-                                    activeChapterId === chapter.id 
-                                    ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' 
-                                    : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'
-                                }`}
-                            >
-                                <FileText size={14} className={activeChapterId === chapter.id ? "text-white" : "text-gray-400 group-hover:text-gray-600"} />
-                                <span className="text-xs font-medium truncate flex-1 text-left">{chapter.title}</span>
-                                {activeChapterId === chapter.id && <div className="w-1.5 h-1.5 rounded-full bg-white/50"></div>}
-                            </button>
-                        ))}
-                        
-                        {/* Settings Shortcut */}
-                        <button 
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5 transition-all mt-4"
+                    <div className="space-y-px">
+                        {chapters.map((chapter, idx) => {
+                            const isActive = activeChapterId === chapter.id;
+                            return (
+                                <div key={chapter.id} className="relative group/chap">
+                                    <button
+                                        onClick={() => changeActiveChapter(chapter.id)}
+                                        disabled={isContentLoading}
+                                        className={`w-full flex items-center pr-14 pl-2.5 py-2.5 rounded-lg transition-all text-left ${isActive
+                                            ? `${c.activeBg} font-semibold`
+                                            : `${c.hoverBg} text-[#6B7280] hover:text-[#374151]`
+                                            }`}
+                                    >
+                                        <span className={`w-6 flex justify-center shrink-0 ${isActive ? (isDark ? 'text-cyan-400' : 'text-blue-500') : 'text-[#D1D5DB]'}`}>
+                                            {React.createElement(getChapterIcon(chapter.title), { size: 13, strokeWidth: isActive ? 2.5 : 2 })}
+                                        </span>
+                                        <span className={`text-[11.5px] truncate flex-1 tracking-tight ${isActive ? c.activeAccent : ''} ${!isActive && isDark ? 'text-[#D1D5DB]' : ''}`}>
+                                            {chapter.title}
+                                        </span>
+                                        {isActive && <div className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-cyan-400' : 'bg-blue-500'} absolute right-3 top-1/2 -translate-y-1/2`}></div>}
+                                    </button>
+
+                                    {/* Action Buttons (Hover) */}
+                                    <div className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover/chap:opacity-100 transition-opacity ${isActive ? 'bg-white shadow-sm rounded-md px-0.5 py-0.5' : ''}`}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setRenameTitleInput(chapter.title);
+                                                setChapterToRename(chapter.id);
+                                            }}
+                                            className={`p-1.5 rounded-md text-[#9CA3AF] hover:text-[#4B5563] hover:bg-gray-100 transition-all`}
+                                            title="Ganti Nama Bab"
+                                        >
+                                            <Edit2 size={11} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setChapterToDelete(chapter.id); }}
+                                            className={`p-1.5 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 transition-all ${chapters.length <= 1 ? 'hidden' : ''}`}
+                                            title="Hapus Bab"
+                                            disabled={chapters.length <= 1}
+                                        >
+                                            <Trash2 size={11} />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {/* Add Chapter Button */}
+                        <button
+                            onClick={() => createChapter('Bab Baru')}
+                            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg ${c.hoverBg} text-[#9CA3AF] hover:text-[#374151] transition-colors mt-1`}
                         >
-                            <Settings size={14} className="opacity-70" />
-                            <span className="text-xs font-medium">Pengaturan Project</span>
+                            <span className="w-5 flex justify-center opacity-60"><Plus size={11} /></span>
+                            <span className="text-[11px] font-medium">Tambah Bab</span>
+                        </button>
+
+                        {/* Settings */}
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className={`w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg ${c.hoverBg} ${c.textMuted} transition-colors mt-3`}
+                        >
+                            <Settings size={11} className="opacity-50" />
+                            <span className="text-[11px] font-medium">Settings</span>
                         </button>
                     </div>
                 )}
 
-                {/* TAB 2: REFERENCES */}
+                {/* RENAME CHAPTER MODAL */}
+                {chapterToRename && typeof document !== 'undefined' ? createPortal(
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                                <h3 className="text-[13px] font-semibold text-gray-800">Ganti Nama Bab</h3>
+                                <button onClick={() => setChapterToRename(null)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                            </div>
+                            <div className="p-5">
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={renameTitleInput}
+                                    onChange={(e) => setRenameTitleInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            renameChapter(chapterToRename, renameTitleInput);
+                                            setChapterToRename(null);
+                                        }
+                                    }}
+                                    className="w-full text-[13px] px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                    placeholder="Masukkan nama bab baru..."
+                                />
+                            </div>
+                            <div className="px-5 py-3 bg-gray-50 flex justify-end gap-2">
+                                <button
+                                    onClick={() => setChapterToRename(null)}
+                                    className="px-4 py-1.5 text-[11px] font-medium text-gray-500 hover:bg-gray-200 rounded-lg transition-colors"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        renameChapter(chapterToRename, renameTitleInput);
+                                        setChapterToRename(null);
+                                    }}
+                                    className="px-4 py-1.5 text-[11px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm"
+                                >
+                                    Simpan Perubahan
+                                </button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                ) : null}
+
+                {/* DELETE CHAPTER CONFIRM MODAL */}
+                {chapterToDelete && typeof document !== 'undefined' ? createPortal(
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="px-6 py-6 text-center">
+                                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Trash2 size={24} className="text-red-500" />
+                                </div>
+                                <h3 className="text-[15px] font-semibold text-gray-900 mb-2">Hapus Bab?</h3>
+                                <p className="text-[13px] text-gray-500">
+                                    Apakah Anda yakin ingin menghapus bab ini secara permanen? Aksi ini tidak dapat dibatalkan.
+                                </p>
+                            </div>
+                            <div className="px-5 py-3 bg-gray-50 flex justify-end gap-2">
+                                <button
+                                    onClick={() => setChapterToDelete(null)}
+                                    className="flex-1 px-4 py-2 text-[12px] font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        deleteChapter(chapterToDelete);
+                                        setChapterToDelete(null);
+                                    }}
+                                    className="flex-1 px-4 py-2 text-[12px] font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm"
+                                >
+                                    Ya, Hapus
+                                </button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                ) : null}
+                {/* REFERENCES */}
                 {activeTab === 'references' && (
-                    <div className="space-y-3 px-1">
-                         <button onClick={() => setIsRefModalOpen(true)} className="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 shadow-sm">
-                            <Search size={14} /> Cari Referensi Online
+                    <div className="space-y-2 px-0.5">
+                        <button onClick={() => setIsRefModalOpen(true)} className={`w-full py-1.5 ${c.searchBtn} rounded-lg text-[10px] font-semibold transition-all flex items-center justify-center gap-1.5`}>
+                            <Search size={11} /> Cari Referensi
                         </button>
 
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                             {displayedReferences.length > 0 ? displayedReferences.map((ref, idx) => (
-                                <div key={idx} className="bg-white/60 dark:bg-white/5 p-3 rounded-xl border border-gray-200/50 dark:border-white/10 hover:border-blue-400/30 transition-all group">
-                                    <div className="flex items-start gap-2.5 mb-2">
-                                        <div className="mt-0.5 shrink-0 w-4 h-4 bg-gray-100 dark:bg-white/10 rounded-full flex items-center justify-center text-[9px] font-bold text-gray-500">
-                                            {displayedReferences.length - idx}
-                                        </div>
-                                        <div>
-                                            <div className="text-[11px] font-semibold text-gray-800 dark:text-gray-200 line-clamp-2 leading-snug">{ref.title}</div>
-                                            <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-500">
-                                                <span className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-400 font-medium">{ref.year || "?"}</span>
-                                                <span className="truncate max-w-[120px] opacity-80">{ref.author}</span>
+                                <div key={idx} className={`p-2.5 rounded-lg border ${c.refCard} transition-all group`}>
+                                    <div className="flex items-start gap-2">
+                                        <span className={`text-[8px] font-mono ${c.textMuted} mt-0.5 shrink-0`}>
+                                            [{displayedReferences.length - idx}]
+                                        </span>
+                                        <div className="min-w-0">
+                                            <div className={`text-[10px] font-semibold ${c.text} line-clamp-2 leading-snug`}>{ref.title}</div>
+                                            <div className={`flex items-center gap-1.5 mt-1 text-[9px] ${c.textMuted}`}>
+                                                <span>{ref.year || "?"}</span>
+                                                <span className="opacity-30">·</span>
+                                                <span className="truncate">{ref.author}</span>
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    {/* Action Buttons (Hidden until hover) */}
-                                    <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <button 
+
+                                    {/* Hover actions */}
+                                    <div className={`flex gap-1 mt-1.5 pt-1.5 border-t ${c.border} opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                        <button
                                             onClick={() => onInsertCitation && onInsertCitation(`(${ref.author ? ref.author.split(',')[0].split(' ').pop() : 'Anonim'}, ${ref.year})`)}
-                                            className="flex-1 py-1 bg-black/5 dark:bg-white/10 hover:bg-blue-500 hover:text-white text-gray-500 rounded-md text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
+                                            className={`flex-1 py-0.5 rounded text-[9px] font-medium flex items-center justify-center gap-1 ${c.hoverBg} ${c.textMuted}`}
                                         >
-                                            <Quote size={10} /> Cite
+                                            <Quote size={8} /> Cite
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => handleCopyBib(ref)}
-                                            className="flex-1 py-1 bg-black/5 dark:bg-white/10 hover:bg-green-600 hover:text-white text-gray-500 rounded-md text-[10px] font-medium flex items-center justify-center gap-1 transition-colors"
+                                            className={`flex-1 py-0.5 rounded text-[9px] font-medium flex items-center justify-center gap-1 ${c.hoverBg} ${c.textMuted}`}
                                         >
-                                            <Copy size={10} /> Bib
+                                            <Copy size={8} /> Bib
                                         </button>
                                     </div>
                                 </div>
                             )) : (
-                                <div className="text-center py-10 flex flex-col items-center opacity-40">
-                                    <BookOpen size={24} className="mb-2 text-gray-400"/>
-                                    <div className="text-[10px] text-gray-500">Belum ada referensi</div>
+                                <div className="text-center py-8 flex flex-col items-center">
+                                    <BookOpen size={18} className={`mb-1.5 ${c.textMuted} opacity-30`} />
+                                    <div className={`text-[10px] ${c.textMuted}`}>Belum ada referensi</div>
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
+
+                {/* HISTORY */}
+                {activeTab === 'history' && (
+                    <RevisionTimeline />
+                )}
             </div>
 
             <ReferenceSearchModal isOpen={isRefModalOpen} onClose={() => setIsRefModalOpen(false)} onReferenceAdded={handleAddReference} />
-            <ProjectSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)}/>
+            <ProjectSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         </div>
     );
 }

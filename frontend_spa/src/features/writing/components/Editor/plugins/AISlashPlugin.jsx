@@ -7,6 +7,9 @@ import { LexicalTypeaheadMenuPlugin, MenuOption } from '@lexical/react/LexicalTy
 import { $createParagraphNode, $createTextNode, $getSelection, $isRangeSelection, TextNode } from 'lexical';
 import { Sparkles, ArrowRight, PenTool, BookOpen, AlignLeft } from 'lucide-react';
 import * as ReactDOM from 'react-dom';
+import { buildAIContext } from '../../../context/ContextBuilder';
+import { nanoid } from 'nanoid';
+import { useToast } from '../../UI/ToastProvider.jsx';
 
 // 1. Definisikan Opsi Menu
 class AICommandOption extends MenuOption {
@@ -45,12 +48,13 @@ const COMMANDS = [
     keywords: ['ref', 'cite', 'sumber'],
     task: 'custom',
     prompt: 'Sarankan referensi atau teori yang relevan untuk mendukung pernyataan di atas.'
-  })
+  }),
 ];
 
 export default function AISlashPlugin({ projectId, userStyle }) {
   const [editor] = useLexicalComposerContext();
   const [queryString, setQueryString] = useState(null);
+  const { addToast } = useToast();
 
   // Trigger: Deteksi karakter "/"
   const checkForSlashTrigger = useBasicTypeaheadTriggerMatch('/', { minLength: 0 });
@@ -65,14 +69,15 @@ export default function AISlashPlugin({ projectId, userStyle }) {
 
   // --- FUNGSI UTAMA: PANGGIL AI ---
   const runAICommand = useCallback(async (selectedOption) => {
-    if (!projectId) return alert("Pilih proyek dulu!");
+    if (!projectId) {
+      addToast("Pilih proyek dulu!", 'error');
+      return;
+    }
 
     editor.update(() => {
-        // 1. Hapus Slash Command-nya dulu (bersihkan menu)
         const selection = $getSelection();
         if ($isRangeSelection(selection)) {
-             // Logic penghapusan otomatis ditangani oleh TypeaheadPlugin saat select,
-             // tapi kita akan insert node placeholder di sini.
+             // Penghapusan slash command ditangani oleh TypeaheadPlugin saat select.
         }
     });
 
@@ -82,25 +87,26 @@ export default function AISlashPlugin({ projectId, userStyle }) {
         editor.getEditorState().read(() => {
             const selection = $getSelection();
             if ($isRangeSelection(selection)) {
-                const anchorNode = selection.anchor.getNode();
-                // Ambil teks dari node saat ini dan node sebelumnya (sederhana)
-                previousText = anchorNode.getTextContent();
+                previousText = selection.getTextContent();
             }
         });
 
-        // 3. Panggil API (Fetch Stream)
-        const response = await fetch('/api/writing-assistant', {
+        const contextPayload = buildAIContext({
+            project: { id: projectId },
+            chapterHtml: '',
+            references: [],
+            selectionHtml: previousText,
+        });
+
+        // 3. Panggil API via Agent System (SSE)
+        const response = await fetch('/api/agent/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                task: selectedOption.prompt || selectedOption.task,
+                context: contextPayload,
                 projectId,
-                task: selectedOption.task,
-                data: {
-                    topic: selectedOption.prompt, // Kirim instruksi sebagai topik
-                    previous_content: previousText,
-                    style_profile: userStyle
-                },
-                model: 'fast' 
+                chapterId: '',
             })
         });
 
@@ -136,9 +142,9 @@ export default function AISlashPlugin({ projectId, userStyle }) {
 
     } catch (e) {
         console.error("AI Error:", e);
-        alert("Gagal menjalankan perintah AI.");
+        addToast("Gagal menjalankan perintah AI.", 'error');
     }
-  }, [editor, projectId, userStyle]);
+  }, [addToast, editor, projectId, userStyle]);
 
   // --- RENDER MENU ---
   const onSelectOption = useCallback(
@@ -162,19 +168,16 @@ export default function AISlashPlugin({ projectId, userStyle }) {
         anchorElementRef,
         { selectedIndex, selectOptionAndCleanUp, setHighlightedIndex }
       ) => {
-        if (anchorElementRef.current && options.length === 0) {
-          return null;
-        }
-
+        if (anchorElementRef.current && options.length === 0) return null;
         return anchorElementRef.current && ReactDOM.createPortal(
-          <div className="bg-[#1C1E24] border border-[#2C303B] rounded-xl shadow-2xl p-2 w-64 animate-in fade-in zoom-in-95 duration-100 z-50">
+          <div className="absolute z-[9999] bg-[#1C1E24] border border-[#2C303B] rounded-xl shadow-2xl p-2 w-64 animate-in fade-in zoom-in-95 duration-100">
             <div className="text-[10px] uppercase font-bold text-slate-500 px-2 py-1 mb-1 tracking-wider">
                 AI COMMANDS
             </div>
             <ul className="space-y-1">
               {options.map((option, i) => (
                 <li
-                  key={option.key}
+                  key={option.title}
                   tabIndex={-1}
                   className={`flex items-center gap-3 px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${
                     selectedIndex === i

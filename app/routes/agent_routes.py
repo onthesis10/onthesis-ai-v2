@@ -1,3 +1,5 @@
+"""LEGACY MODULE — dataset-analysis agent, superseded by supervisor.py pipeline."""
+
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from app.services.agent_service import agent_app
 from langchain_core.messages import HumanMessage
@@ -11,7 +13,7 @@ agent_bp = Blueprint('agent_bp', __name__)
 TEMP_DIR = os.path.join(os.getcwd(), 'temp_data')
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-@agent_bp.route('/api/agent/upload', methods=['POST'])
+@agent_bp.route('/upload', methods=['POST'])
 def upload_file():
     """
     Upload a CSV file for analysis.
@@ -43,7 +45,7 @@ def upload_file():
         'filename': filename
     })
 
-@agent_bp.route('/api/agent/stream', methods=['POST'])
+@agent_bp.route('/stream', methods=['POST'])
 def stream_chat_agent():
     """
     Stream the agent's execution process.
@@ -108,7 +110,7 @@ def stream_chat_agent():
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
-@agent_bp.route('/api/agent/export/pdf', methods=['POST'])
+@agent_bp.route('/export/pdf', methods=['POST'])
 def export_agent_pdf():
     """
     Export agent analysis results to PDF.
@@ -165,7 +167,7 @@ def export_agent_pdf():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@agent_bp.route('/api/agent/export/docx', methods=['POST'])
+@agent_bp.route('/export/docx', methods=['POST'])
 def export_agent_docx():
     """
     Export agent analysis results to DOCX.

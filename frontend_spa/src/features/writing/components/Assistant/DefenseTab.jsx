@@ -1,9 +1,9 @@
 // FILE: src/components/Assistant/DefenseTab.jsx
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-    MessageSquare, Play, RefreshCw, User, 
-    ShieldAlert, Award, StopCircle, Lock, Zap, BookOpen, 
+import {
+    MessageSquare, Play, RefreshCw, User,
+    ShieldAlert, Award, StopCircle, Lock, Zap, BookOpen,
     Send, Sparkles
 } from 'lucide-react';
 
@@ -14,18 +14,18 @@ import { useTheme } from '../../context/ThemeContext.jsx'; // Theme Aware
 const DefenseTab = () => {
     const { project, isPro, setShowUpgradeModal } = useProject();
     const { theme } = useTheme();
-    
+
     // --- STATE ---
     const [messages, setMessages] = useState([]);
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [feedbackReport, setFeedbackReport] = useState(null);
-    
+
     // Config
-    const [examinerType, setExaminerType] = useState('critical'); 
-    const [difficulty, setDifficulty] = useState('hard'); 
-    
+    const [examinerType, setExaminerType] = useState('critical');
+    const [difficulty, setDifficulty] = useState('hard');
+
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -37,7 +37,7 @@ const DefenseTab = () => {
 
     // Focus Input
     useEffect(() => {
-        if(isSessionActive) setTimeout(() => inputRef.current?.focus(), 100);
+        if (isSessionActive) setTimeout(() => inputRef.current?.focus(), 100);
     }, [isSessionActive]);
 
     // --- LOGIC: START ---
@@ -50,18 +50,19 @@ const DefenseTab = () => {
         setIsSessionActive(true);
         setFeedbackReport(null);
         setMessages([
-            { 
-                role: 'system', 
+            {
+                role: 'system',
                 content: `SIDANG DIBUKA. PENGUJI: ${getExaminerName(examinerType).toUpperCase()}.`,
                 type: 'info'
             }
         ]);
-        
+
         setIsLoading(true);
         try {
             const res = await api.post('/api/defense/start', {
                 examiner_type: examinerType,
                 difficulty: difficulty,
+                projectId: project?.id,
                 project_context: {
                     title: project?.title,
                     problem: project?.problem_statement,
@@ -92,10 +93,11 @@ const DefenseTab = () => {
             const res = await api.post('/api/defense/answer', {
                 answer: userMsg,
                 history: messages.filter(m => m.role !== 'system'),
-                examiner_type: examinerType
+                examiner_type: examinerType,
+                projectId: project?.id
             });
             const rawMsg = res?.response?.message || res?.message;
-            const dosenResponse = rawMsg || "Maaf, bisa ulangi?"; 
+            const dosenResponse = rawMsg || "Maaf, bisa ulangi?";
             setMessages(prev => [...prev, { role: 'assistant', content: dosenResponse }]);
         } catch (error) {
             setMessages(prev => [...prev, { role: 'system', content: "Koneksi terputus.", type: 'error' }]);
@@ -113,7 +115,8 @@ const DefenseTab = () => {
         setIsLoading(true);
         try {
             const res = await api.post('/api/defense/evaluate', {
-                history: messages.filter(m => m.role !== 'system')
+                history: messages.filter(m => m.role !== 'system'),
+                projectId: project?.id
             });
             const reportData = res?.response || res?.report || res;
             if (reportData && (reportData.score || reportData.verdict)) {
@@ -130,7 +133,7 @@ const DefenseTab = () => {
     };
 
     const getExaminerName = (type) => {
-        switch(type) {
+        switch (type) {
             case 'critical': return "Prof. Killer";
             case 'methodologist': return "Dr. Metodologi";
             default: return "Dosen Pembimbing";
@@ -140,7 +143,7 @@ const DefenseTab = () => {
     return (
         // CONTAINER: Full Flush, Theme Aware
         <div className="h-full flex flex-col bg-white dark:bg-[#18181B] text-gray-800 dark:text-[#CCCCCC] font-sans text-[13px] border-l border-gray-200 dark:border-white/5 relative overflow-hidden transition-colors duration-300">
-            
+
             {/* 1. HEADER (Minimalist) */}
             <div className="px-4 py-3 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#18181B] flex justify-between items-center shrink-0">
                 <div>
@@ -150,18 +153,18 @@ const DefenseTab = () => {
                     </h3>
                 </div>
                 {isSessionActive && (
-                    <button 
+                    <button
                         onClick={endSession}
                         className="px-2 py-1 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-[10px] font-bold rounded-sm border border-red-200 dark:border-red-900/30 transition-all flex items-center gap-1.5"
                     >
-                        <StopCircle size={12}/> Stop & Grade
+                        <StopCircle size={12} /> Stop & Grade
                     </button>
                 )}
             </div>
 
             {/* 2. CONTENT AREA */}
             <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-                
+
                 {/* A. CONFIGURATION MENU (PRE-SESSION) */}
                 {!isSessionActive && !feedbackReport && (
                     <div className="p-6 max-w-sm mx-auto">
@@ -180,11 +183,10 @@ const DefenseTab = () => {
                                 <button
                                     key={item.id}
                                     onClick={() => setExaminerType(item.id)}
-                                    className={`w-full relative flex items-center gap-3 p-3 rounded-md border transition-all text-left group ${
-                                        examinerType === item.id 
-                                        ? 'bg-gray-50 dark:bg-[#202023] border-gray-300 dark:border-white/20 ring-1 ring-gray-200 dark:ring-white/10' 
-                                        : 'bg-white dark:bg-[#18181B] border-gray-200 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5'
-                                    }`}
+                                    className={`w-full relative flex items-center gap-3 p-3 rounded-md border transition-all text-left group ${examinerType === item.id
+                                            ? 'bg-gray-50 dark:bg-[#202023] border-gray-300 dark:border-white/20 ring-1 ring-gray-200 dark:ring-white/10'
+                                            : 'bg-white dark:bg-[#18181B] border-gray-200 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5'
+                                        }`}
                                 >
                                     <div className={`p-2 rounded-sm bg-gray-100 dark:bg-black/20 ${item.color}`}>
                                         <item.icon size={16} />
@@ -193,7 +195,7 @@ const DefenseTab = () => {
                                         <div className="text-[11px] font-bold text-gray-700 dark:text-gray-200">{item.label}</div>
                                         <div className="text-[10px] text-gray-400 leading-tight">{item.desc}</div>
                                     </div>
-                                    
+
                                     {/* Pro Lock */}
                                     {!isPro && item.id === 'critical' && (
                                         <Lock size={12} className="text-amber-500 absolute top-2 right-2" />
@@ -208,22 +210,21 @@ const DefenseTab = () => {
                                 <button
                                     key={level}
                                     onClick={() => setDifficulty(level)}
-                                    className={`py-1.5 rounded-sm text-[10px] font-bold uppercase transition-all ${
-                                        difficulty === level 
-                                        ? 'bg-white dark:bg-[#2B2D31] text-gray-800 dark:text-white shadow-sm' 
-                                        : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                                    }`}
+                                    className={`py-1.5 rounded-sm text-[10px] font-bold uppercase transition-all ${difficulty === level
+                                            ? 'bg-white dark:bg-[#2B2D31] text-gray-800 dark:text-white shadow-sm'
+                                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                                        }`}
                                 >
                                     {level} {level === 'extreme' && !isPro && '🔒'}
                                 </button>
                             ))}
                         </div>
 
-                        <button 
+                        <button
                             onClick={startSession}
                             className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-[11px] font-bold uppercase tracking-wide transition-all shadow-sm flex items-center justify-center gap-2"
                         >
-                            <Play size={12} fill="currentColor"/> Masuk Ruang Sidang
+                            <Play size={12} fill="currentColor" /> Masuk Ruang Sidang
                         </button>
                     </div>
                 )}
@@ -234,7 +235,7 @@ const DefenseTab = () => {
                         {messages.map((msg, idx) => {
                             const isUser = msg.role === 'user';
                             const isSystem = msg.role === 'system';
-                            
+
                             if (isSystem) {
                                 return (
                                     <div key={idx} className="flex justify-center">
@@ -251,19 +252,18 @@ const DefenseTab = () => {
                                     <div className={`text-[9px] font-bold mb-1 px-1 uppercase tracking-wide opacity-50 ${isUser ? 'text-gray-500' : 'text-red-500'}`}>
                                         {isUser ? 'Anda' : getExaminerName(examinerType)}
                                     </div>
-                                    
+
                                     {/* Message Bubble (Kotak Flush) */}
-                                    <div className={`max-w-[90%] px-4 py-3 rounded-md text-[12px] leading-relaxed shadow-sm border ${
-                                        isUser 
-                                        ? 'bg-white dark:bg-[#2B2D31] text-gray-800 dark:text-gray-200 border-gray-200 dark:border-white/5' 
-                                        : 'bg-red-50 dark:bg-[#252020] text-gray-800 dark:text-gray-300 border-red-100 dark:border-red-900/20'
-                                    }`}>
+                                    <div className={`max-w-[90%] px-4 py-3 rounded-md text-[12px] leading-relaxed shadow-sm border ${isUser
+                                            ? 'bg-white dark:bg-[#2B2D31] text-gray-800 dark:text-gray-200 border-gray-200 dark:border-white/5'
+                                            : 'bg-red-50 dark:bg-[#252020] text-gray-800 dark:text-gray-300 border-red-100 dark:border-red-900/20'
+                                        }`}>
                                         {msg.content}
                                     </div>
                                 </div>
                             );
                         })}
-                        
+
                         {isLoading && (
                             <div className="flex gap-2 items-center text-[10px] text-gray-400 ml-2 animate-pulse">
                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
@@ -280,9 +280,8 @@ const DefenseTab = () => {
                         <div className="bg-white dark:bg-[#202023] border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden shadow-sm">
                             {/* Score Header */}
                             <div className="p-6 text-center bg-gray-50 dark:bg-[#25282C] border-b border-gray-200 dark:border-white/5">
-                                <h2 className={`text-2xl font-black uppercase tracking-tight mb-2 ${
-                                    feedbackReport.verdict === 'LULUS' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                                }`}>
+                                <h2 className={`text-2xl font-black uppercase tracking-tight mb-2 ${feedbackReport.verdict === 'LULUS' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                    }`}>
                                     {feedbackReport.verdict || "SELESAI"}
                                 </h2>
                                 <div className="text-4xl font-black text-gray-800 dark:text-white">{feedbackReport.score}</div>
@@ -293,13 +292,13 @@ const DefenseTab = () => {
                             <div className="p-5 space-y-4">
                                 <div>
                                     <h4 className="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase mb-1 flex items-center gap-1">
-                                        <Award size={10}/> Kekuatan
+                                        <Award size={10} /> Kekuatan
                                     </h4>
                                     <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed border-l-2 border-green-500 pl-2">{feedbackReport.strengths || "-"}</p>
                                 </div>
                                 <div>
                                     <h4 className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase mb-1 flex items-center gap-1">
-                                        <ShieldAlert size={10}/> Kelemahan
+                                        <ShieldAlert size={10} /> Kelemahan
                                     </h4>
                                     <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed border-l-2 border-red-500 pl-2">{feedbackReport.weaknesses || "-"}</p>
                                 </div>
@@ -309,11 +308,11 @@ const DefenseTab = () => {
                                 </div>
                             </div>
 
-                            <button 
+                            <button
                                 onClick={() => { setFeedbackReport(null); setMessages([]); }}
                                 className="w-full py-3 bg-gray-100 dark:bg-[#2B2D31] hover:bg-gray-200 dark:hover:bg-[#323642] text-gray-700 dark:text-gray-300 text-[10px] font-bold uppercase transition-colors flex items-center justify-center gap-2 border-t border-gray-200 dark:border-white/5"
                             >
-                                <RefreshCw size={12}/> Try Again
+                                <RefreshCw size={12} /> Try Again
                             </button>
                         </div>
                     </div>
@@ -342,11 +341,10 @@ const DefenseTab = () => {
                             <button
                                 type="submit"
                                 disabled={isLoading || !input.trim()}
-                                className={`p-1.5 rounded-sm transition-colors ${
-                                    isLoading || !input.trim() 
-                                    ? 'text-gray-300 dark:text-gray-600' 
-                                    : 'text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
-                                }`}
+                                className={`p-1.5 rounded-sm transition-colors ${isLoading || !input.trim()
+                                        ? 'text-gray-300 dark:text-gray-600'
+                                        : 'text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                                    }`}
                             >
                                 <Send size={14} />
                             </button>

@@ -3,9 +3,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Play, AlertCircle } from 'lucide-react'
 import { useAnalysisStore } from '../../store/useAnalysisStore'
 import { VariableSelector } from './VariableSelector'
+import { useThemeStore, type ThemeMode } from '@/store/themeStore'
+import { cn } from '@/lib/utils'
+import { customToast } from '../../lib/customToast'
 
 export const AnalysisDialog = () => {
-    const { activeAnalysis, closeAnalysis, variables } = useAnalysisStore()
+    const activeAnalysis = useAnalysisStore(s => s.activeAnalysis);
+    const closeAnalysis = useAnalysisStore(s => s.closeAnalysis);
+    const variables = useAnalysisStore(s => s.variables);
+    const { theme } = useThemeStore()
 
     // Local state for variable buckets
     const [sourceVars, setSourceVars] = useState<any[]>([])
@@ -23,6 +29,49 @@ export const AnalysisDialog = () => {
             setError(null)
         }
     }, [activeAnalysis, variables])
+
+    // --- THEME CONFIG (Glassmorphism & Premium Layout) ---
+    const activeConfig = {
+        light: {
+            overlay: "bg-slate-900/20 backdrop-blur-sm",
+            modal: "bg-white/95 border-white/20 shadow-2xl backdrop-blur-3xl ring-1 ring-black/5",
+            header: "bg-black/5 border-black/5",
+            footer: "bg-black/5 border-black/5",
+            textMain: "text-slate-800",
+            accentBar: "bg-[#007AFF]",
+            closeBtn: "text-slate-400 hover:text-slate-600 hover:bg-black/5",
+            btnCancel: "text-slate-500 hover:text-slate-700 hover:bg-black/5",
+            btnRun: "bg-[#007AFF] text-white hover:opacity-90 shadow-md shadow-blue-500/20 border-transparent",
+            divider: "border-black/5",
+            errorBox: "bg-red-50 border-red-100 text-red-600"
+        },
+        dark: {
+            overlay: "bg-[#0B1120]/60 backdrop-blur-sm",
+            modal: "bg-[#1E293B]/95 border-white/10 shadow-2xl backdrop-blur-3xl ring-1 ring-white/5",
+            header: "bg-white/5 border-white/10",
+            footer: "bg-white/5 border-white/10",
+            textMain: "text-white",
+            accentBar: "bg-[#0EA5E9]",
+            closeBtn: "text-slate-500 hover:text-slate-300 hover:bg-white/5",
+            btnCancel: "text-slate-400 hover:text-slate-200 hover:bg-white/5",
+            btnRun: "bg-[#0EA5E9] text-white hover:opacity-90 shadow-[0_0_20px_-5px_rgba(14,165,233,0.5)] border-transparent",
+            divider: "border-white/10",
+            errorBox: "bg-red-500/10 border-red-500/20 text-red-400"
+        },
+        happy: {
+            overlay: "bg-orange-900/20 backdrop-blur-sm",
+            modal: "bg-white/95 border-white/60 shadow-2xl shadow-orange-500/10 backdrop-blur-3xl ring-1 ring-orange-100",
+            header: "bg-orange-50/50 border-orange-100",
+            footer: "bg-orange-50/50 border-orange-100",
+            textMain: "text-stone-800",
+            accentBar: "bg-orange-400",
+            closeBtn: "text-orange-400 hover:text-orange-600 hover:bg-orange-100/50",
+            btnCancel: "text-stone-500 hover:text-stone-700 hover:bg-orange-100/50",
+            btnRun: "bg-gradient-to-r from-orange-400 to-rose-400 text-white hover:opacity-90 shadow-lg shadow-orange-500/25 border-transparent",
+            divider: "border-orange-100",
+            errorBox: "bg-red-50 border-red-200 text-red-600"
+        }
+    }[theme as ThemeMode || 'dark']
 
     if (!activeAnalysis) return null
 
@@ -73,7 +122,7 @@ export const AnalysisDialog = () => {
                 return {
                     title: 'Linear Regression',
                     bucket1: { label: 'Dependent Variable', max: 1 },
-                    bucket2: { label: 'Independent Variable(s) (Block 1)', max: undefined }
+                    bucket2: { label: 'Independent Variable(s)', max: undefined }
                 }
             case 'chi-square':
                 return {
@@ -88,7 +137,6 @@ export const AnalysisDialog = () => {
 
     const config = getConfig(activeAnalysis)
 
-    // --- HANDLERS ---
     // --- HANDLERS ---
     const handleRun = () => {
         // Validation check before closing anything
@@ -134,6 +182,18 @@ export const AnalysisDialog = () => {
             try {
                 const startTime = Date.now()
 
+                // FORCE SYNC DATASET TO BACKEND BEFORE ANALYSIS
+                const state = useAnalysisStore.getState();
+                await fetch('/api/project/upload-dataset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data: state.data,
+                        variables: state.variables,
+                        project_id: 'default' // MUST be 'default' because execute_analysis loads 'default'
+                    })
+                });
+
                 // Construct Payload
                 let payload: any = {}
                 let varsToSend: string[] = []
@@ -170,11 +230,15 @@ export const AnalysisDialog = () => {
                     setAnalysisResult(result.data)
                     setInterpretation(null)
                 } else {
-                    setAnalysisError(result.error || "Analysis failed on server.")
+                    const errMsg = result.error || "Analysis failed on server."
+                    setAnalysisError(errMsg)
+                    customToast.error(errMsg)
                 }
 
             } catch (err: any) {
-                setAnalysisError(err.message || "Network request failed.")
+                const errMsg = err.message || "Network request failed."
+                setAnalysisError(errMsg)
+                customToast.error(errMsg)
             } finally {
                 setIsAnalyzing(false) // Stop Global Loader
             }
@@ -191,45 +255,48 @@ export const AnalysisDialog = () => {
 
     return (
         <AnimatePresence>
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className={cn("fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 transition-all", activeConfig.overlay)}>
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="w-full max-w-2xl bg-white dark:bg-[#15171b] rounded-xl shadow-2xl border border-white/10 flex flex-col overflow-hidden max-h-[85vh]"
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className={cn("w-full max-w-3xl rounded-3xl flex flex-col overflow-hidden max-h-[90vh] shadow-2xl", activeConfig.modal)}
                 >
                     {/* Header */}
-                    <div className="h-14 shrink-0 border-b border-border/40 flex items-center justify-between px-6 bg-secondary/5">
-                        <h3 className="font-semibold text-lg flex items-center gap-2">
-                            <span className="w-2 h-6 bg-gradient-to-b from-cyan-400 to-blue-600 rounded-sm"></span>
+                    <div className={cn("h-16 shrink-0 border-b flex items-center justify-between px-6", activeConfig.header)}>
+                        <h3 className={cn("font-bold text-lg tracking-tight flex items-center gap-3", activeConfig.textMain)}>
+                            <span className={cn("w-1.5 h-6 rounded-full", activeConfig.accentBar)}></span>
                             {config.title}
                         </h3>
-                        <button onClick={closeAnalysis} className="p-2 hover:bg-secondary rounded-full transition-colors">
-                            <X className="w-5 h-5 text-muted-foreground" />
+                        <button onClick={closeAnalysis} className={cn("p-2 rounded-full transition-colors", activeConfig.closeBtn)}>
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
 
                         {error && (
-                            <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-3 rounded-lg flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4" />
+                            <div className={cn("border text-sm p-4 rounded-xl flex items-center gap-3 font-medium", activeConfig.errorBox)}>
+                                <AlertCircle className="w-5 h-5 shrink-0" />
                                 {error}
                             </div>
                         )}
 
-                        <VariableSelector
-                            label={config.bucket1.label}
-                            availableVars={sourceVars}
-                            selectedVars={targetVars1}
-                            maxLimit={config.bucket1.max}
-                            onAdd={(vars) => moveVars(vars, sourceVars, setSourceVars, targetVars1, setTargetVars1)}
-                            onRemove={(vars) => moveVars(vars, targetVars1, setTargetVars1, sourceVars, setSourceVars)}
-                        />
+                        <div className="px-1">
+                            <VariableSelector
+                                label={config.bucket1.label}
+                                availableVars={sourceVars}
+                                selectedVars={targetVars1}
+                                maxLimit={config.bucket1.max}
+                                onAdd={(vars) => moveVars(vars, sourceVars, setSourceVars, targetVars1, setTargetVars1)}
+                                onRemove={(vars) => moveVars(vars, targetVars1, setTargetVars1, sourceVars, setSourceVars)}
+                            />
+                        </div>
 
                         {config.bucket2 && (
-                            <div className="pt-4 border-t border-border/30">
+                            <div className={cn("pt-6 mt-6 border-t px-1", activeConfig.divider)}>
                                 <VariableSelector
                                     label={config.bucket2.label}
                                     availableVars={sourceVars}
@@ -244,16 +311,19 @@ export const AnalysisDialog = () => {
                     </div>
 
                     {/* Footer */}
-                    <div className="h-16 shrink-0 border-t border-border/40 flex items-center justify-end px-6 gap-3 bg-secondary/5">
+                    <div className={cn("h-20 shrink-0 border-t flex items-center justify-end px-6 gap-3", activeConfig.footer)}>
                         <button
                             onClick={closeAnalysis}
-                            className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-secondary transition-colors text-muted-foreground"
+                            className={cn("px-5 py-2.5 rounded-xl text-sm font-bold transition-colors", activeConfig.btnCancel)}
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleRun}
-                            className="px-6 py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                            className={cn(
+                                "px-8 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2",
+                                activeConfig.btnRun
+                            )}
                         >
                             <Play className="w-4 h-4 fill-white" />
                             Run Analysis

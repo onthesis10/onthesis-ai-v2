@@ -9,36 +9,23 @@ import { AIDataGeneratorWizard } from '../components/generator/AIDataGeneratorWi
 import { AnalysisToolbar } from '../components/analysis/AnalysisToolbar'
 import { AnalysisDialog } from '../components/analysis/AnalysisDialog'
 import { AnalysisLoader } from '../components/ui/AnalysisLoader'
-import { SettingsPopover } from '../components/layout/SettingsPopover'
-import { Settings } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export const DataAnalysisPage = () => {
-    const { viewMode, fetchUserData, isAnalyzing } = useAnalysisStore()
-    const [showSettings, setShowSettings] = useState(false)
+    const viewMode = useAnalysisStore(s => s.viewMode);
+    const fetchUserData = useAnalysisStore(s => s.fetchUserData);
+    const isAnalyzing = useAnalysisStore(s => s.isAnalyzing);
 
     useEffect(() => {
         fetchUserData()
     }, [])
 
     return (
-        <div className="flex flex-col h-full w-full space-y-4 p-4 relative">
-            {/* Header: Toolbar (Left) & System Controls (Right) */}
+        <div className="flex flex-col h-full w-full space-y-2 p-2 relative">
             {/* Header: Toolbar (Center) & System Controls (Right) */}
             <div className="relative flex items-center justify-center shrink-0 z-40">
                 {/* Center: Analysis Tools */}
                 <AnalysisToolbar />
-
-                {/* Right: System Controls (Absolute) */}
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                    <button
-                        onClick={() => setShowSettings(true)}
-                        className="flex items-center justify-center w-9 h-9 rounded-full text-muted-foreground hover:bg-white/50 hover:text-foreground transition-all duration-200 border border-transparent hover:border-border/40 hover:shadow-sm"
-                        title="Settings"
-                    >
-                        <Settings className="w-4 h-4" />
-                    </button>
-                </div>
             </div>
 
             {/* Content Area */}
@@ -53,13 +40,6 @@ export const DataAnalysisPage = () => {
             {/* Global Overlays */}
             <AIDataGeneratorWizard />
             <AnalysisDialog />
-
-            {/* Settings Overlay */}
-            <AnimatePresence>
-                {showSettings && (
-                    <SettingsPopover onClose={() => setShowSettings(false)} />
-                )}
-            </AnimatePresence>
 
             {/* Loader Overlay */}
             <AnimatePresence>

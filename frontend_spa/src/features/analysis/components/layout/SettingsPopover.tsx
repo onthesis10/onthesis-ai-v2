@@ -4,7 +4,8 @@ import { useAnalysisStore } from '../../store/useAnalysisStore'
 import { cn } from '@/lib/utils'
 
 export const SettingsPopover = ({ onClose }: { onClose: () => void }) => {
-    const { theme, setTheme } = useAnalysisStore()
+    const theme = useAnalysisStore(s => s.theme);
+    const setTheme = useAnalysisStore(s => s.setTheme);
 
     return (
         <div style={{ zIndex: 9999, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

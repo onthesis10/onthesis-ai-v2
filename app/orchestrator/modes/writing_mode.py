@@ -4,13 +4,20 @@ from app.orchestrator.schema import RequestContext, ExecutionPlan, Step
 from app.orchestrator.registry import ModeRegistry
 from app.orchestrator.engines.tone_controller import ToneController
 import logging
-from litellm import completion
+from app.utils.ai_utils import safe_completion as completion
 
 logger = logging.getLogger(__name__)
 
 
 @ModeRegistry.register("writing")
 class WritingMode(BaseMode):
+    """
+    Specialized mode for Academic Writing.
+    Handles strict academic tone, citations, and structural requirements.
+
+    Legacy orchestration path: the writing-agent runtime is now centered on
+    SupervisorAgent -> TaskPlanner -> PlanExecutor via `/api/agent/run`.
+    """
     def __init__(self):
         super().__init__()
         self.mode_name = "writing"

@@ -7,9 +7,10 @@ import { useThemeStore } from "@/store/themeStore";
 interface JourneyTrackerProps {
     referencesCount?: number;
     projectCount?: number;
+    productivity?: any;
 }
 
-export function JourneyTracker({ referencesCount = 0, projectCount = 0 }: JourneyTrackerProps) {
+export function JourneyTracker({ referencesCount = 0, projectCount = 0, productivity }: JourneyTrackerProps) {
     const { stats, syncSession } = useProductivity();
     const [isActive, setIsActive] = useState(false);
     const [sessionSeconds, setSessionSeconds] = useState(0);
@@ -70,7 +71,7 @@ export function JourneyTracker({ referencesCount = 0, projectCount = 0 }: Journe
         return `${h}h ${m}m ${s}s`;
     };
 
-    const totalTime = (stats?.total_seconds || 0) + sessionSeconds;
+    const totalTime = (productivity?.level?.total_hours ? productivity.level.total_hours * 3600 : 0) + sessionSeconds;
 
     // Theme Logic matching StatsGrid
     const getStyles = () => {

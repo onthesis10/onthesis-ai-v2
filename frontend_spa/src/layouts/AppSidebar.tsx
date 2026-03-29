@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard,
     PenTool,
@@ -19,12 +19,17 @@ import {
     Zap,
     LogOut,
     MoreVertical,
-    CheckCircle2
+    CheckCircle2,
+    Crown,       // Ikon baru untuk Premium
+    LifeBuoy,    // Ikon baru untuk Bantuan
+    Palette,     // Ikon baru untuk Tema
+    User         // Ikon baru untuk Profil
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { OnThesisLogo } from '@/components/ui/OnThesisLogo';
 import { useThemeStore, type ThemeMode } from '@/store/themeStore';
+import { AccountModal } from './AccountModal';
 
 /* ─── Config ─── */
 const menuItems = [
@@ -38,13 +43,6 @@ const menuItems = [
 const featureItems = [
     { to: '/citations', icon: BookMarked, label: 'Citation Manager' },
     { to: '/paraphrase', icon: FileText, label: 'Paraphrase AI' },
-    { to: '/research-map', icon: Map, label: 'Research Map' },
-    { to: '/thesis-defense', icon: GraduationCap, label: 'Defense Prep' },
-];
-
-const generalItems = [
-    { to: '/settings', icon: Settings, label: 'Settings' },
-    { to: '/help', icon: HelpCircle, label: 'Help' },
 ];
 
 const themeIcons: Record<ThemeMode, typeof Sun> = {
@@ -67,6 +65,7 @@ interface AppSidebarProps {
 export function AppSidebar({ user }: AppSidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
     const { theme, cycleTheme } = useThemeStore();
@@ -79,6 +78,18 @@ export function AppSidebar({ user }: AppSidebarProps) {
         ? user.displayName.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
         : '..';
     const isPro = user?.isPro || false;
+
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        import('@/lib/firebase').then(({ auth }) => {
+            if (auth) {
+                auth.signOut().then(() => {
+                    navigate('/login');
+                });
+            }
+        });
+    };
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -97,49 +108,41 @@ export function AppSidebar({ user }: AppSidebarProps) {
             ? location.pathname === '/dashboard'
             : location.pathname.startsWith(to);
 
-    /* ─── THEME CONFIG (Polished & Expensive Look) ─── */
     const themeStyles = {
         light: {
-            // macOS Finder Style: Light gray translucent
             sidebar: "bg-[#F5F5F7]/80 border-r border-black/5 backdrop-blur-3xl",
             textMain: "text-slate-500 font-medium",
-            textActive: "text-white font-semibold",
-            // Classic Apple Blue Active State
-            bgActive: "bg-[#007AFF] shadow-md shadow-blue-500/20",
+            textActive: "text-slate-900 font-semibold",
+            bgActive: "bg-[#007AFF] text-white shadow-md shadow-blue-500/20",
             bgHover: "hover:bg-black/5 hover:text-slate-900",
-            popup: "bg-white/80 border-white/20 shadow-2xl backdrop-blur-3xl ring-1 ring-black/5",
+            popup: "bg-white/95 border-black/5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] backdrop-blur-xl",
             divider: "bg-black/5",
-            userCard: "hover:bg-white/50 border-transparent",
+            userCard: "bg-white border-black/5 shadow-sm hover:bg-black/[0.02]",
             toggleBtn: "text-slate-400 hover:text-slate-700 hover:bg-black/5",
             sectionLabel: "text-slate-400"
         },
         dark: {
-            // Deep Space Glass
             sidebar: "bg-[#0B1120]/70 border-r border-white/5 backdrop-blur-3xl",
             textMain: "text-slate-400 font-medium",
             textActive: "text-white font-semibold",
-            // Neon Cyan Accent
             bgActive: "bg-[#0EA5E9] shadow-[0_0_20px_-5px_rgba(14,165,233,0.5)]",
             bgHover: "hover:bg-white/5 hover:text-slate-200",
-            popup: "bg-[#1E293B]/80 border-white/10 shadow-2xl backdrop-blur-3xl ring-1 ring-white/5",
+            popup: "bg-[#1E293B]/95 border-white/10 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)] backdrop-blur-xl",
             divider: "bg-white/5",
-            userCard: "hover:bg-white/5 border-transparent",
+            userCard: "bg-[#0F172A]/80 border-white/5 shadow-sm hover:bg-white/5",
             toggleBtn: "text-slate-500 hover:text-slate-200 hover:bg-white/5",
             sectionLabel: "text-slate-500"
         },
         happy: {
-            // Tropical Morning (Clean & Expensive) - NO PURPLE
-            // Background warm white glass
             sidebar: "bg-[#FFFCF5]/70 border-r border-orange-100/50 backdrop-blur-3xl",
             textMain: "text-stone-500 font-medium",
-            textActive: "text-white font-bold",
-            // Gradient Orange-Rose (Warm & Happy)
+            textActive: "text-stone-800 font-bold",
             bgActive: "bg-gradient-to-r from-orange-400 to-rose-400 shadow-lg shadow-orange-500/25",
             bgHover: "hover:bg-orange-50/80 hover:text-orange-600",
-            popup: "bg-white/80 border-white/60 shadow-xl shadow-orange-500/10 backdrop-blur-3xl ring-1 ring-orange-100",
+            popup: "bg-white/95 border-orange-100 shadow-[0_20px_40px_-15px_rgba(249,115,22,0.15)] backdrop-blur-xl",
             divider: "bg-orange-100",
-            userCard: "hover:bg-white/60 border-transparent hover:shadow-sm hover:ring-1 hover:ring-orange-100",
-            toggleBtn: "text-orange-300 hover:text-orange-500 hover:bg-orange-50",
+            userCard: "bg-white border-orange-100 shadow-sm hover:border-orange-200 hover:shadow-md",
+            toggleBtn: "text-orange-400 hover:text-orange-600 hover:bg-orange-50",
             sectionLabel: "text-stone-400"
         }
     }[theme as ThemeMode || 'dark'];
@@ -147,18 +150,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
     const activeConfig = themeStyles;
 
     /* ─── Render Nav Item ─── */
-    const renderNavItem = (item: { to: string; icon: typeof LayoutDashboard; label: string }) => {
+    const renderNavItem = (item: { to: string; icon: any; label: string }) => {
         const active = isActive(item.to);
-
         return (
             <NavLink
                 key={item.to}
                 to={item.to}
                 className={cn(
-                    "group relative flex items-center gap-3 rounded-lg transition-all duration-300 ease-out select-none overflow-hidden",
-                    collapsed
-                        ? "w-9 h-9 justify-center mx-auto my-1.5"
-                        : "w-full px-3 py-2 mx-0", // Increased padding for cleaner look
+                    "group relative flex items-center gap-3 rounded-xl transition-all duration-300 ease-out select-none overflow-hidden",
+                    collapsed ? "w-10 h-10 justify-center mx-auto my-1.5" : "w-full px-3 py-2.5 mx-0",
                     "text-[13px] tracking-wide",
                     active ? activeConfig.textActive : activeConfig.textMain,
                     active ? activeConfig.bgActive : activeConfig.bgHover
@@ -167,11 +167,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
             >
                 <item.icon className={cn(
                     "relative z-10 w-[18px] h-[18px] shrink-0 transition-transform duration-300",
-                    active ? "scale-100" : "scale-100 group-hover:scale-110"
-                )} />
+                    active ? "scale-100" : "scale-100 group-hover:scale-110",
+                    !active && "opacity-80 group-hover:opacity-100"
+                )} strokeWidth={active ? 2.5 : 2} />
 
                 {!collapsed && (
-                    <span className="relative z-10 truncate">{item.label}</span>
+                    <span className="relative z-10 truncate font-medium">{item.label}</span>
                 )}
             </NavLink>
         );
@@ -179,14 +180,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
     const renderLabel = (text: string) =>
         !collapsed ? (
-            <p className={cn(
-                "px-3 pt-5 pb-2 text-[10px] font-bold uppercase tracking-widest font-sans select-none",
-                activeConfig.sectionLabel
-            )}>
+            <p className={cn("px-3 pt-6 pb-2 text-[10px] font-bold uppercase tracking-widest font-sans select-none", activeConfig.sectionLabel)}>
                 {text}
             </p>
         ) : (
-            <div className={cn("my-2 mx-auto w-4 h-[1px]", activeConfig.divider)} />
+            <div className={cn("my-3 mx-auto w-4 h-[1px]", activeConfig.divider)} />
         );
 
     return (
@@ -194,148 +192,169 @@ export function AppSidebar({ user }: AppSidebarProps) {
             className={cn(
                 "h-screen sticky top-0 flex flex-col shrink-0 transition-[width] duration-500 cubic-bezier(0.25,1,0.5,1) z-[60]",
                 activeConfig.sidebar,
-                collapsed ? "w-[72px]" : "w-[260px]" // Wider sidebar for "Expensive" feel
+                collapsed ? "w-[64px]" : "w-[260px]"
             )}
         >
             {/* ─── HEADER ─── */}
-            <div className="h-[72px] flex items-center shrink-0 relative px-5">
-                <div className={cn(
-                    "flex-1 flex items-center transition-all duration-500",
-                    collapsed ? "justify-center" : "justify-start"
-                )}>
+            <div className={cn("h-[72px] flex items-center shrink-0 relative transition-all duration-300", collapsed ? "px-0 justify-center" : "px-5")}>
+                <div className={cn("flex-1 flex items-center transition-all duration-500", collapsed ? "justify-center" : "justify-start")}>
                     <div
-                        className="cursor-pointer transition-transform hover:scale-105 active:scale-95"
-                        onClick={() => !collapsed && setCollapsed(true)}
+                        className={cn("transition-transform hover:scale-105 active:scale-95", collapsed ? "cursor-pointer" : "cursor-default")}
+                        onClick={() => collapsed && setCollapsed(false)}
+                        title={collapsed ? "Expand Sidebar" : undefined}
                     >
-                        <OnThesisLogo
-                            variant={collapsed ? 'animated-icon' : 'animated'}
-                            className="h-8 w-auto" // Slightly smaller logo for elegance
-                        />
+                        <OnThesisLogo variant={collapsed ? 'animated-icon' : 'animated'} className={cn("w-auto transition-all duration-300", collapsed ? "h-9" : "h-8")} />
                     </div>
                 </div>
 
-                <div className={cn(
-                    "absolute right-4 top-1/2 -translate-y-1/2 transition-all duration-300 z-20",
-                    collapsed ? "opacity-0 pointer-events-none translate-x-4" : "opacity-100 translate-x-0"
-                )}>
-                    <button
-                        onClick={() => setCollapsed(!collapsed)}
-                        className={cn("p-2 rounded-lg transition-all", activeConfig.toggleBtn)}
-                    >
-                        <PanelLeftClose className="w-4 h-4 stroke-[1.5]" />
+                <div className={cn("absolute right-4 top-1/2 -translate-y-1/2 transition-all duration-300 z-20", collapsed ? "opacity-0 pointer-events-none translate-x-4" : "opacity-100 translate-x-0")}>
+                    <button onClick={() => setCollapsed(!collapsed)} className={cn("p-2 rounded-xl transition-all", activeConfig.toggleBtn)}>
+                        <PanelLeftClose className="w-[18px] h-[18px] stroke-[1.5]" />
                     </button>
                 </div>
             </div>
 
             {/* ─── NAV ─── */}
-            <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6 space-y-1 scrollbar-none">
-                {collapsed && (
-                    <div className="flex justify-center mb-6 mt-2 animate-in fade-in zoom-in duration-300">
-                        <button
-                            onClick={() => setCollapsed(!collapsed)}
-                            className={cn("p-2.5 rounded-xl shadow-sm transition-all border border-transparent", activeConfig.bgActive, activeConfig.textActive)}
-                        >
-                            <PanelLeftOpen className="w-4 h-4 stroke-[2]" />
-                        </button>
-                    </div>
-                )}
-
+            <nav className={cn("flex-1 overflow-y-auto overflow-x-hidden pb-6 space-y-1 scrollbar-none mt-2", collapsed ? "px-2" : "px-3")}>
                 <div className="space-y-0.5">{renderLabel('Workspace')}{menuItems.map(renderNavItem)}</div>
                 <div className="space-y-0.5">{renderLabel('Research Tools')}{featureItems.map(renderNavItem)}</div>
-                <div className="space-y-0.5">{renderLabel('System')}{generalItems.map(renderNavItem)}</div>
             </nav>
 
             {/* ─── FOOTER & POPUP ─── */}
-            <div className="shrink-0 px-3 pb-6 pt-2 relative" ref={menuRef}>
+            <div className={cn("shrink-0 pb-6 pt-2 relative", collapsed ? "px-2" : "px-4")} ref={menuRef}>
 
                 {/* POPUP MENU */}
                 <div className={cn(
-                    "absolute rounded-2xl border p-2 transition-all duration-300 cubic-bezier(0.2, 0.8, 0.2, 1) z-[9999]",
+                    "absolute rounded-[20px] border p-2 transition-all duration-300 ease-out z-[9999] flex flex-col gap-1",
                     activeConfig.popup,
                     collapsed
-                        ? "left-[calc(100%+12px)] bottom-6 w-64 origin-bottom-left"
-                        : "bottom-[calc(100%+8px)] left-2 right-2 origin-bottom",
+                        ? "left-[calc(100%+12px)] bottom-6 w-[260px] origin-bottom-left"
+                        : "bottom-[calc(100%+12px)] left-4 right-4 origin-bottom",
                     isMenuOpen
                         ? "opacity-100 scale-100 translate-y-0 visible"
-                        : "opacity-0 scale-95 translate-y-2 invisible"
+                        : "opacity-0 scale-95 translate-y-3 invisible"
                 )}>
-                    {/* User Profile Header in Popup */}
-                    <div className={cn(
-                        "flex items-center gap-3 px-3 py-3 mb-2 rounded-xl",
-                        theme === 'happy' ? "bg-orange-50/50" : "bg-black/5 dark:bg-white/5"
-                    )}>
+                    {/* Header: Click to open Account Modal */}
+                    <button
+                        onClick={() => {
+                            setIsMenuOpen(false);
+                            setIsAccountModalOpen(true);
+                        }}
+                        className={cn(
+                            "group flex items-center gap-3 px-3 py-3 mb-1 rounded-[14px] w-full text-left transition-all duration-200 border border-transparent",
+                            theme === 'dark' ? "hover:bg-white/10 hover:border-white/10" : "hover:bg-black/5 hover:border-black/5"
+                        )}
+                    >
                         <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white/20",
-                            theme === 'happy' ? "bg-gradient-to-br from-orange-400 to-rose-500" : "bg-gradient-to-br from-blue-500 to-cyan-600"
+                            "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ring-2 ring-white/20 shrink-0 transition-transform group-hover:scale-105",
+                            theme === 'happy' ? "bg-gradient-to-br from-amber-400 to-orange-500" : "bg-gradient-to-br from-blue-400 to-indigo-500"
                         )}>
                             {initials}
                         </div>
-                        <div className="overflow-hidden">
-                            <p className={cn("text-sm font-bold truncate", activeConfig.textMain)}>{displayName}</p>
-                            <p className={cn("text-xs truncate opacity-60", activeConfig.textMain)}>{email}</p>
+                        <div className="overflow-hidden flex-1">
+                            <p className={cn("text-sm font-bold truncate tracking-tight transition-colors group-hover:text-blue-500", activeConfig.textActive)}>
+                                {displayName}
+                            </p>
+                            <p className={cn("text-[11px] truncate mt-0.5", activeConfig.textMain)}>
+                                {email}
+                            </p>
                         </div>
+                        <User className={cn("w-4 h-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-50 group-hover:translate-x-0", activeConfig.textMain)} />
+                    </button>
+
+                    <div className={cn("h-px w-full my-0.5 opacity-50", activeConfig.divider)} />
+
+                    {/* Menu Items with premium hover effect */}
+                    <div className="flex flex-col gap-0.5">
+                        <NavLink to="/pricing" onClick={() => setIsMenuOpen(false)} className={cn("group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200", activeConfig.bgHover, activeConfig.textMain)}>
+                            <Crown className="w-[18px] h-[18px] opacity-70 group-hover:text-amber-500 group-hover:opacity-100 transition-colors" strokeWidth={1.5} />
+                            <span className="flex-1 text-left transition-transform group-hover:translate-x-0.5">Tingkatkan Paket</span>
+                        </NavLink>
+
+                        <button onClick={() => { cycleTheme(); setIsMenuOpen(false); }} className={cn("group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200", activeConfig.bgHover, activeConfig.textMain)}>
+                            <Palette className="w-[18px] h-[18px] opacity-70 group-hover:text-blue-500 group-hover:opacity-100 transition-colors" strokeWidth={1.5} />
+                            <span className="flex-1 text-left transition-transform group-hover:translate-x-0.5">Ganti Tema</span>
+                        </button>
                     </div>
 
-                    <NavLink to="/upgrade" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 group", activeConfig.bgHover, activeConfig.textMain)}>
-                        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                            <Zap className="w-4 h-4 fill-current" />
-                        </div>
-                        <span className="flex-1 font-semibold">Upgrade to Pro</span>
-                    </NavLink>
+                    <div className={cn("h-px w-full my-0.5 opacity-50", activeConfig.divider)} />
 
-                    <button onClick={cycleTheme} className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1", activeConfig.bgHover, activeConfig.textMain)}>
-                        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border transition-colors", theme === 'happy' ? "bg-white border-orange-200 text-orange-500" : "bg-white/10 border-white/10")}>
-                            <ThemeIcon className="w-4 h-4" />
-                        </div>
-                        <span className="flex-1 text-left">Theme: {theme.charAt(0).toUpperCase() + theme.slice(1)}</span>
-                    </button>
+                    <div className="flex flex-col gap-0.5">
+                        <NavLink to="/help" onClick={() => setIsMenuOpen(false)} className={cn("group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200", activeConfig.bgHover, activeConfig.textMain)}>
+                            <LifeBuoy className="w-[18px] h-[18px] opacity-70 group-hover:text-emerald-500 group-hover:opacity-100 transition-colors" strokeWidth={1.5} />
+                            <span className="flex-1 text-left transition-transform group-hover:translate-x-0.5">Pusat Bantuan</span>
+                        </NavLink>
 
-                    <div className={cn("h-px w-full my-2", activeConfig.divider)} />
-
-                    <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20">
-                        <LogOut className="w-4 h-4" />
-                        <span className="text-left">Sign out</span>
-                    </button>
+                        <button onClick={handleLogout} className={cn("group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200", activeConfig.bgHover, "hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400 text-slate-500")}>
+                            <LogOut className="w-[18px] h-[18px] opacity-70 group-hover:opacity-100" strokeWidth={1.5} />
+                            <span className="text-left transition-transform group-hover:translate-x-0.5">Keluar</span>
+                        </button>
+                    </div>
                 </div>
 
-                {/* USER CARD TRIGGER (Simplified & Elegant) */}
+                {/* ACCOUNT MODAL */}
+                <AccountModal
+                    isOpen={isAccountModalOpen}
+                    onClose={() => setIsAccountModalOpen(false)}
+                    user={user}
+                    theme={theme}
+                    activeConfig={activeConfig}
+                />
+
+                {/* USER CARD TRIGGER (Polished) */}
                 <div
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
                     className={cn(
-                        "flex items-center gap-3 rounded-2xl p-2 cursor-pointer transition-all duration-300 group select-none border",
+                        "flex items-center gap-3 rounded-[16px] p-2 cursor-pointer transition-all duration-300 group select-none border",
                         activeConfig.userCard,
-                        collapsed ? "justify-center p-0 h-10 w-10 border-transparent bg-transparent" : "justify-between pr-4"
+                        collapsed ? "justify-center p-0 h-11 w-11 border-transparent bg-transparent hover:bg-transparent shadow-none hover:shadow-none" : "justify-between pr-4 hover:-translate-y-0.5",
+                        isMenuOpen && !collapsed && "ring-2 ring-blue-500/20 border-blue-500/30"
                     )}
                 >
                     <div className={cn("flex items-center gap-3", collapsed ? "justify-center" : "flex-1 min-w-0")}>
                         <div className="relative shrink-0">
                             <div className={cn(
-                                "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-white dark:ring-[#0B1120] overflow-hidden transition-transform group-hover:scale-105",
-                                theme === 'happy' ? "bg-gradient-to-tr from-orange-400 to-rose-400" : "bg-gradient-to-br from-blue-500 to-cyan-500"
+                                "w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm ring-[2px] ring-white dark:ring-[#1E293B] overflow-hidden transition-transform duration-300 group-hover:scale-105",
+                                theme === 'happy' ? "bg-gradient-to-br from-amber-400 to-orange-500" : "bg-gradient-to-br from-blue-400 to-indigo-500"
                             )}>
                                 {initials}
                             </div>
-                            <span className={cn(
-                                "absolute bottom-0 right-0 w-3 h-3 rounded-full ring-2 ring-white dark:ring-[#0B1120]",
-                                isPro
-                                    ? (theme === 'happy' ? "bg-amber-400" : "bg-amber-500")
-                                    : (theme === 'happy' ? "bg-emerald-400" : "bg-emerald-500")
-                            )} />
+                            {/* Pro Badge */}
+                            {isPro && (
+                                <div className={cn(
+                                    "absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center ring-[2px] ring-white dark:ring-[#1E293B] shadow-sm",
+                                    theme === 'happy' ? "bg-amber-400 text-amber-900" : "bg-gradient-to-br from-amber-400 to-yellow-500 text-amber-900"
+                                )}>
+                                    <Zap className="w-[8px] h-[8px] fill-current" strokeWidth={3} />
+                                </div>
+                            )}
                         </div>
 
                         {!collapsed && (
-                            <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                <p className={cn("text-[13px] font-bold truncate leading-none mb-1", activeConfig.textMain)}>{displayName}</p>
-                                <p className={cn("text-[11px] font-medium truncate leading-none opacity-60", activeConfig.textMain)}>
-                                    {isPro ? "Pro Plan" : "Free Plan"}
+                            <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+                                <p className={cn("text-[13px] font-bold truncate leading-none", activeConfig.textActive)}>
+                                    {displayName}
+                                </p>
+                                <p className={cn("text-[11px] font-medium truncate leading-none flex items-center gap-1", activeConfig.textMain)}>
+                                    {isPro ? (
+                                        <span className={cn("bg-clip-text text-transparent bg-gradient-to-r", theme === 'happy' ? "from-amber-500 to-orange-500" : "from-amber-400 to-yellow-600 dark:from-amber-300 dark:to-yellow-500")}>
+                                            Pro Member
+                                        </span>
+                                    ) : (
+                                        <span className="opacity-70">Free Plan</span>
+                                    )}
                                 </p>
                             </div>
                         )}
                     </div>
 
                     {!collapsed && (
-                        <div className={cn("transition-colors", theme === 'happy' ? "text-orange-300 group-hover:text-orange-500" : "text-slate-400 group-hover:text-slate-600")}>
-                            <MoreVertical className="w-4 h-4" />
+                        <div className={cn(
+                            "transition-all duration-300",
+                            isMenuOpen ? "rotate-180" : "rotate-0",
+                            theme === 'happy' ? "text-orange-300 group-hover:text-orange-500" : "text-slate-400 group-hover:text-slate-600"
+                        )}>
+                            <Settings className="w-[18px] h-[18px] opacity-70 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
                         </div>
                     )}
                 </div>

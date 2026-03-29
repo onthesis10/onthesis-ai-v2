@@ -7,6 +7,7 @@ interface StatsGridProps {
         projects: number;
         references: number;
         isPro: boolean;
+        productivity?: any;
     };
     loading: boolean;
 }
@@ -55,10 +56,29 @@ export function StatsGrid({ stats, loading }: StatsGridProps) {
         return config;
     };
 
+    const prod = stats.productivity;
     const cards = [
-        { label: "Active Projects", value: stats.projects, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
-        { label: "References", value: stats.references, icon: BookOpen, color: "text-indigo-500", bg: "bg-indigo-500/10" },
-        { label: "Status", value: stats.isPro ? "PRO Plan" : "Free Plan", icon: Quote, color: stats.isPro ? "text-amber-500" : "text-slate-500", bg: stats.isPro ? "bg-amber-500/10" : "bg-slate-500/10" },
+        { 
+            label: prod?.level?.current_level || "Researcher", 
+            value: prod?.level?.icon || "🥉", 
+            icon: FileText, 
+            color: "text-blue-500", 
+            bg: "bg-blue-500/10" 
+        },
+        { 
+            label: "Total Writing", 
+            value: `${prod?.level?.total_hours || 0}h`, 
+            icon: BookOpen, 
+            color: "text-indigo-500", 
+            bg: "bg-indigo-500/10" 
+        },
+        { 
+            label: "Current Streak", 
+            value: `${prod?.streak?.current_streak || 0} Days`, 
+            icon: ArrowUpRight, 
+            color: "text-emerald-500", 
+            bg: "bg-emerald-500/10" 
+        },
     ];
 
     return (

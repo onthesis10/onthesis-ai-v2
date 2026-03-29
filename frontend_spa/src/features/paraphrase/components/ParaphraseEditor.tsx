@@ -1,15 +1,18 @@
 import React from 'react';
 import { Sparkles, Loader2, Eraser, PenLine } from 'lucide-react';
 import { useThemeStore } from '@/store/themeStore';
+import { ParaphraseStyleSelect } from './ParaphraseStyleSelect';
 
 interface ParaphraseEditorProps {
     value: string;
     onChange: (val: string) => void;
     onParaphrase: () => void;
     isProcessing: boolean;
+    selectedStyle: string;
+    onStyleChange: (val: string) => void;
 }
 
-const ParaphraseEditor: React.FC<ParaphraseEditorProps> = ({ value, onChange, onParaphrase, isProcessing }) => {
+const ParaphraseEditor: React.FC<ParaphraseEditorProps> = ({ value, onChange, onParaphrase, isProcessing, selectedStyle, onStyleChange }) => {
     const { theme } = useThemeStore();
     const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
 
@@ -47,6 +50,11 @@ const ParaphraseEditor: React.FC<ParaphraseEditorProps> = ({ value, onChange, on
                     </span>
                 </div>
                 <div className="flex items-center gap-3">
+                    <ParaphraseStyleSelect
+                        value={selectedStyle}
+                        onChange={onStyleChange}
+                        isHappy={isHappy}
+                    />
                     <span className={`text-[10px] font-mono font-medium px-2 py-1 rounded-md ${badgeStyle}`}>
                         {wordCount} words
                     </span>

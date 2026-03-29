@@ -20,3 +20,4 @@ from . import analysis_routes
 from . import payment_routes
 from . import workflow_routes
 from . import generator_routes
+from . import writing_intelligence_routes  # Phase 2: Ghost Text + Agent Loop

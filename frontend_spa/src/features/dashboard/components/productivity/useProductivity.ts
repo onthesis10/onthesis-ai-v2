@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import axios from 'axios';
 
 interface LevelInfo {
     current_level: string;
-    icon: string; // e.g., "🥉"
+    icon: string;
     total_hours: number;
     progress_percent: number;
     next_level: string | null;
@@ -21,53 +22,75 @@ interface ProductivityStats {
     streak: StreakInfo;
 }
 
-export const useProductivity = () => {
-    const [stats, setStats] = useState<ProductivityStats | null>(null);
-    const [heatmapData, setHeatmapData] = useState<{ date: string, count: number }[]>([]);
-    const [loading, setLoading] = useState(true);
+interface ProductivityState {
+    stats: ProductivityStats | null;
+    heatmapData: { date: string, count: number }[];
+    loading: boolean;
+    hasFetched: boolean;
+    fetchStats: () => Promise<void>;
+    fetchHeatmap: () => Promise<void>;
+    syncSession: (seconds: number) => Promise<void>;
+    refresh: () => Promise<void>;
+    setHasFetched: (val: boolean) => void;
+}
 
-    const fetchStats = useCallback(async () => {
+export const useProductivityStore = create<ProductivityState>((set, get) => ({
+    stats: null,
+    heatmapData: [],
+    loading: true,
+    hasFetched: false,
+
+    setHasFetched: (val) => set({ hasFetched: val }),
+
+    fetchStats: async () => {
         try {
             const response = await axios.get('/api/productivity/stats');
-            setStats(response.data);
+            set({ stats: response.data, loading: false });
         } catch (error) {
             console.error("Error fetching productivity stats:", error);
-        } finally {
-            setLoading(false);
+            set({ loading: false });
         }
-    }, []);
+    },
 
-    const fetchHeatmap = useCallback(async () => {
+    fetchHeatmap: async () => {
         try {
             const response = await axios.get('/api/productivity/heatmap');
-            setHeatmapData(response.data);
+            set({ heatmapData: response.data });
         } catch (error) {
             console.error("Error fetching heatmap:", error);
         }
-    }, []);
+    },
 
-    const syncSession = async (seconds: number) => {
+    syncSession: async (seconds: number) => {
         if (seconds <= 0) return;
         try {
             await axios.post('/api/productivity/sync', { duration: seconds });
-            // Refresh stats after sync
-            fetchStats();
-            fetchHeatmap();
+            await get().refresh();
         } catch (error) {
             console.error("Error syncing session:", error);
         }
-    };
+    },
+
+    refresh: async () => {
+        await Promise.all([get().fetchStats(), get().fetchHeatmap()]);
+    }
+}));
+
+export const useProductivity = () => {
+    const store = useProductivityStore();
 
     useEffect(() => {
-        fetchStats();
-        fetchHeatmap();
-    }, [fetchStats, fetchHeatmap]);
+        if (!store.hasFetched) {
+            store.setHasFetched(true);
+            store.refresh();
+        }
+    }, [store.hasFetched, store.refresh]);
 
     return {
-        stats,
-        heatmapData,
-        loading,
-        syncSession,
-        refresh: () => { fetchStats(); fetchHeatmap(); }
+        stats: store.stats,
+        heatmapData: store.heatmapData,
+        loading: store.loading,
+        syncSession: store.syncSession,
+        refresh: store.refresh
     };
 };

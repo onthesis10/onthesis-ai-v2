@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Microscope, Users, Database, Activity, GitBranch } from 'lucide-react';
+import { useToast } from '../../../UI/ToastProvider.jsx';
 
 /**
  * MethodWizard Component
@@ -7,6 +8,7 @@ import { Microscope, Users, Database, Activity, GitBranch } from 'lucide-react';
  * Output: Mengirim data form ke parent via props onGenerate.
  */
 const MethodWizard = ({ onGenerate, isGenerating, onStop }) => {
+    const { addToast } = useToast();
     // Mode: 'kuantitatif' | 'kualitatif'
     const [methodMode, setMethodMode] = useState('kuantitatif');
     
@@ -25,7 +27,7 @@ const MethodWizard = ({ onGenerate, isGenerating, onStop }) => {
     const handleSubmit = () => {
         // Validasi Simple
         if (!formData.design || !formData.participants) {
-            alert("Mohon lengkapi Desain Penelitian dan Partisipan.");
+            addToast("Mohon lengkapi Desain Penelitian dan Partisipan.", 'error');
             return;
         }
 

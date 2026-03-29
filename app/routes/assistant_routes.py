@@ -1,6 +1,5 @@
 import requests
 import urllib.parse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import json
 import os
@@ -22,9 +21,9 @@ from bs4 import BeautifulSoup
 from docx import Document
 
 # Import module internal aplikasi
-from app import firestore_db
+import app
+from app import limiter
 from app.services.ai_service import AIService
-from app.orchestrator.core import AcademicOrchestrator
 from app.utils import ai_utils
 from app.utils.citation_helper import generate_bibliography
 
@@ -34,8 +33,100 @@ from . import assistant_bp
 from . import assistant_bp
 logger = logging.getLogger(__name__)
 
-# Initialize Orchestrator
-orchestrator = AcademicOrchestrator()
+_orchestrator = None
+_agent_supervisor = None
+
+
+def get_orchestrator():
+    global _orchestrator
+    if _orchestrator is None:
+        from app.orchestrator.core import AcademicOrchestrator
+        _orchestrator = AcademicOrchestrator()
+    return _orchestrator
+
+
+def get_agent_supervisor():
+    global _agent_supervisor
+    if _agent_supervisor is None:
+        from app.agent.supervisor import SupervisorAgent
+        _agent_supervisor = SupervisorAgent()
+    return _agent_supervisor
+
+
+def _legacy_generator_task_to_agent_prompt(task_type: str, data: dict, thesis_context_str: str = "") -> str:
+    """Legacy adapter kept for compatibility; new writing-agent flows should use `/api/agent/run`."""
+    input_text = (data or {}).get("input_text", "")
+    title = (data or {}).get("context_title", "")
+    problem = (data or {}).get("context_problem", "")
+    chapter = _detect_chapter_from_task(task_type)
+    variable_name = (data or {}).get("variable_name", "")
+
+    task_prompts = {
+        "general": "Buatkan draft akademik yang relevan dengan konteks tesis dan editor saat ini.",
+        "chat": input_text or "Jawab pertanyaan pengguna berdasarkan konteks tesis saat ini.",
+        "continue": f"Lanjutkan paragraf akademik berikut dengan tetap konsisten terhadap konteks tesis:\n{input_text}",
+        "improve": f"Perbaiki paragraf berikut agar lebih akademik, koheren, dan rapi:\n{input_text}",
+        "paraphrase": f"Parafrase teks berikut tanpa mengubah makna akademiknya:\n{input_text}",
+        "literature_review": "Susun literature review untuk Bab 2 berdasarkan konteks tesis dan referensi yang tersedia.",
+        "bab1_latar_belakang": "Tulis latar belakang penelitian untuk Bab 1 berdasarkan konteks tesis saat ini.",
+        "bab1_part_ideal": "Tulis paragraf kondisi ideal pada latar belakang Bab 1.",
+        "bab1_part_factual": "Tulis paragraf kondisi faktual pada latar belakang Bab 1.",
+        "bab1_part_gap": "Formulasikan research gap yang jelas untuk Bab 1.",
+        "bab1_part_solution": "Tulis paragraf solusi atau arah penelitian untuk Bab 1.",
+        "bab1_rumusan": "Susun rumusan masalah penelitian yang tajam untuk Bab 1.",
+        "bab1_tujuan": "Susun tujuan penelitian yang selaras dengan rumusan masalah.",
+        "bab2_kajian_pustaka": "Susun kajian pustaka Bab 2 yang terstruktur dan akademik.",
+        "bab2_teori": "Jelaskan landasan teori utama untuk Bab 2 secara akademik.",
+        "bab2_part_x": f"Jelaskan kajian teori untuk {variable_name or 'variabel X'} pada Bab 2.",
+        "bab2_part_y": f"Jelaskan kajian teori untuk {variable_name or 'variabel Y'} pada Bab 2.",
+        "bab2_part_context": "Jelaskan konteks penelitian yang relevan untuk Bab 2.",
+        "bab2_part_relation": "Jelaskan hubungan antar variabel atau konsep pada Bab 2.",
+        "bab2_part_framework": "Susun kerangka pemikiran penelitian untuk Bab 2.",
+        "bab2_part_hypothesis": "Susun hipotesis penelitian yang logis untuk Bab 2.",
+        "bab3_metode": "Tulis metodologi penelitian Bab 3 yang konsisten dengan konteks tesis.",
+        "bab3_part_approach": "Jelaskan pendekatan penelitian pada Bab 3.",
+        "bab3_part_loc": "Jelaskan lokasi penelitian pada Bab 3.",
+        "bab3_part_pop": "Jelaskan populasi dan sampel penelitian pada Bab 3.",
+        "bab3_part_var": "Jelaskan definisi variabel penelitian pada Bab 3.",
+        "bab3_part_inst": "Jelaskan instrumen penelitian pada Bab 3.",
+        "bab3_part_val": "Jelaskan uji validitas dan reliabilitas pada Bab 3.",
+        "bab3_part_ana": "Jelaskan teknik analisis data pada Bab 3.",
+        "bab3_part_proc": "Jelaskan prosedur penelitian pada Bab 3.",
+        "methodology": "Susun penjelasan metodologi penelitian secara akademik untuk Bab 3.",
+        "bab4_pembahasan": "Tulis hasil dan pembahasan Bab 4 berdasarkan konteks yang tersedia.",
+        "bab4_part_descriptive": "Tulis analisis statistik deskriptif untuk Bab 4.",
+        "bab4_part_discussion": "Tulis pembahasan hasil penelitian untuk Bab 4.",
+        "bab4_part_implication": "Tulis implikasi hasil penelitian untuk Bab 4.",
+        "bab4_part_object": "Jelaskan objek atau temuan utama penelitian pada Bab 4.",
+        "bab4_part_qualitative": "Tulis interpretasi hasil kualitatif untuk Bab 4.",
+        "bab4_part_prerequisite": "Tulis hasil uji prasyarat analisis untuk Bab 4.",
+        "bab4_part_hypothesis": "Tulis hasil uji hipotesis untuk Bab 4.",
+        "discussion_chapter4": "Susun pembahasan utama Bab 4 yang terhubung ke Bab 2.",
+        "bab5_penutup": "Tulis bab penutup yang mencakup kesimpulan, implikasi, dan saran.",
+        "bab5_part_conclusion": "Tulis kesimpulan penelitian untuk Bab 5.",
+        "bab5_part_implication": "Tulis implikasi penelitian untuk Bab 5.",
+        "bab5_part_suggestion": "Tulis saran penelitian untuk Bab 5.",
+        "conclusion": "Susun kesimpulan penelitian secara ringkas dan akademik.",
+        "validate_citations": "Periksa seluruh sitasi pada draft ini dan jelaskan masalah sitasi yang perlu diperbaiki.",
+    }
+
+    instruction = task_prompts.get(task_type)
+    if not instruction:
+        instruction = f"Bantu tulis bagian tesis untuk {chapter} berdasarkan konteks proyek saat ini."
+
+    context_lines = []
+    if title:
+        context_lines.append(f"Judul: {title}")
+    if problem:
+        context_lines.append(f"Masalah: {problem}")
+    if input_text and task_type not in {"chat", "continue", "improve", "paraphrase"}:
+        context_lines.append(f"Catatan pengguna: {input_text}")
+    if thesis_context_str:
+        context_lines.append(f"Konteks Thesis Brain:\n{thesis_context_str}")
+
+    if context_lines:
+        return f"{instruction}\n\n" + "\n".join(context_lines)
+    return instruction
 
 # ==============================================================================
 # BAGIAN 1: HELPER LIMITATION CHECKER (RATE LIMITING)
@@ -68,7 +159,7 @@ def check_limits(user, limit_type='generator'):
     max_limit = 3 if limit_type == 'generator' else 4
     
     # ID Dokumen: UserID_Tanggal
-    doc_ref = firestore_db.collection(collection_name).document(f"{user.id}_{today_str}")
+    doc_ref = app.firestore_db.collection(collection_name).document(f"{user.id}_{today_str}")
     doc = doc_ref.get()
 
     current_usage = 0
@@ -92,7 +183,7 @@ def increment_limit(user, limit_type='generator'):
     today_str = datetime.datetime.now().strftime('%Y-%m-%d')
     collection_name = 'usage_logs_gen' if limit_type == 'generator' else 'usage_logs_chat'
     
-    doc_ref = firestore_db.collection(collection_name).document(f"{user.id}_{today_str}")
+    doc_ref = app.firestore_db.collection(collection_name).document(f"{user.id}_{today_str}")
     
     if doc_ref.get().exists:
         # Jika dokumen ada, increment count
@@ -120,7 +211,7 @@ def writing_assistant():
 
     try:
         if project_id:
-            doc_ref = firestore_db.collection('projects').document(project_id)
+            doc_ref = app.firestore_db.collection('projects').document(project_id)
             doc = doc_ref.get()
             # Validasi kepemilikan project
             if doc.exists and doc.to_dict().get('userId') == str(current_user.id):
@@ -140,7 +231,7 @@ def writing_studio_page():
     project = None
     try:
         if project_id:
-            doc_ref = firestore_db.collection('projects').document(project_id)
+            doc_ref = app.firestore_db.collection('projects').document(project_id)
             doc = doc_ref.get()
             if doc.exists and doc.to_dict().get('userId') == str(current_user.id):
                 project = doc.to_dict()
@@ -181,7 +272,7 @@ def api_create_project():
             'created_at': firestore.SERVER_TIMESTAMP,
             'updated_at': firestore.SERVER_TIMESTAMP
         }
-        update_time, project_ref = firestore_db.collection('projects').add(new_project)
+        update_time, project_ref = app.firestore_db.collection('projects').add(new_project)
         return jsonify({'status': 'success', 'projectId': project_ref.id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -191,7 +282,7 @@ def api_create_project():
 def get_user_projects():
     """Mengambil daftar project milik user."""
     try:
-        docs = firestore_db.collection('projects')\
+        docs = app.firestore_db.collection('projects')\
             .where('userId', '==', str(current_user.id))\
             .stream()
             
@@ -201,7 +292,9 @@ def get_user_projects():
             projects.append({
                 'id': doc.id,
                 'title': d.get('title', 'Tanpa Judul'),
-                'updated_at': d.get('updated_at', '') 
+                'updated_at': d.get('updated_at', ''),
+                'progress': d.get('progress', 0),
+                'status': d.get('status', 'DRAFT')
             })
         
         # Sort client-side karena firestore composite index kadang ribet
@@ -217,7 +310,7 @@ def get_user_projects():
 def get_project_details(project_id):
     """Mengambil detail satu project."""
     try:
-        doc_ref = firestore_db.collection('projects').document(project_id)
+        doc_ref = app.firestore_db.collection('projects').document(project_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -238,7 +331,7 @@ def update_project(project_id):
     """Update data project (Auto-save)."""
     try:
         data = request.get_json()
-        doc_ref = firestore_db.collection('projects').document(project_id)
+        doc_ref = app.firestore_db.collection('projects').document(project_id)
         doc = doc_ref.get()
         
         if not doc.exists:
@@ -269,7 +362,7 @@ def add_project_reference(project_id):
             return jsonify({'status': 'error', 'message': 'Data kosong'}), 400
 
         # Verifikasi kepemilikan project
-        proj_ref = firestore_db.collection('projects').document(project_id)
+        proj_ref = app.firestore_db.collection('projects').document(project_id)
         proj = proj_ref.get()
         if not proj.exists or proj.to_dict().get('userId') != str(current_user.id):
             return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
@@ -284,7 +377,7 @@ def add_project_reference(project_id):
             del ref_data['id']
 
         # Simpan ke Firestore
-        update_time, doc_ref = firestore_db.collection('citations').add(ref_data)
+        update_time, doc_ref = app.firestore_db.collection('citations').add(ref_data)
         
         # Update dokumen agar punya field 'id' yang sama dengan doc ID (opsional tapi berguna untuk frontend)
         doc_ref.update({'id': doc_ref.id})
@@ -306,7 +399,7 @@ def delete_reference():
         if not ref_id:
             return jsonify({'error': 'No Reference ID'}), 400
             
-        doc_ref = firestore_db.collection('citations').document(ref_id)
+        doc_ref = app.firestore_db.collection('citations').document(ref_id)
         doc = doc_ref.get()
         
         if doc.exists and doc.to_dict().get('userId') == str(current_user.id):
@@ -324,6 +417,7 @@ def delete_reference():
 
 @assistant_bp.route('/api/writing-assistant', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def api_writing_assistant():
     """
     ENDPOINT GENERATOR UTAMA (BAB, OUTLINE, PARAGRAF, DLL).
@@ -347,7 +441,7 @@ def api_writing_assistant():
         # Jika ada project ID, kita ambil data skripsi user untuk dijadikan konteks AI
         if project_id:
             try:
-                doc_ref = firestore_db.collection('projects').document(project_id)
+                doc_ref = app.firestore_db.collection('projects').document(project_id)
                 doc = doc_ref.get()
                 
                 if doc.exists:
@@ -381,7 +475,7 @@ def api_writing_assistant():
         # Mapping task type from frontend to orchestrator mode/tool logic if needed
         # For now, we pass the task type inside context_data and let WritingMode handle it
         
-        result = orchestrator.process_request(
+        result = get_orchestrator().process_request(
             user_id=current_user.id,
             message=req_data.get('data', {}).get('content', '') or req_data.get('message', ''),
             context_data=context_data,
@@ -420,6 +514,7 @@ def api_writing_assistant():
 
 @assistant_bp.route('/chat/stream', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def chat_with_ai_stream():
     """
     ENDPOINT CHAT KHUSUS (LIMIT 4x UNTUK FREE USER).
@@ -451,7 +546,7 @@ def chat_with_ai_stream():
         # Prepare context data
         context_data = wrapper_data.get('data', {})
         
-        result = orchestrator.process_request(
+        result = get_orchestrator().process_request(
             user_id=current_user.id,
             message=data.get('message', ''),
             context_data=context_data,
@@ -478,6 +573,7 @@ def chat_hybrid_route():
 
 @assistant_bp.route('/api/assistant/chat/copilot', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def chat_copilot():
     """
     Endpoint for Context-Aware Research Co-Pilot with Memory.
@@ -528,6 +624,7 @@ def chat_copilot():
 
 @assistant_bp.route('/api/generate-outline', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def api_generate_outline():
     """Generate Outline Skripsi (Direct Call to Utils)."""
     try:
@@ -588,6 +685,7 @@ def api_generate_outline():
 
 @assistant_bp.route('/api/paraphrase', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def paraphrase():
     """API Streaming Paraphrase."""
     # Paraphrase masuk kuota generator
@@ -616,6 +714,7 @@ def paraphrase():
 
 @assistant_bp.route('/expand-text', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def expand_text_endpoint():
     """API Streaming Magic Expand."""
     allowed, msg = check_limits(current_user, 'generator')
@@ -631,7 +730,7 @@ def expand_text_endpoint():
     context_refs_str = ""
     if project_id:
         try:
-            refs_query = firestore_db.collection('citations')\
+            refs_query = app.firestore_db.collection('citations')\
                 .where('projectId', '==', project_id)\
                 .limit(5).stream()
             
@@ -660,6 +759,7 @@ def expand_text_endpoint():
 
 @assistant_bp.route('/api/ai/edit-text', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def ai_edit_text():
     """Endpoint untuk Floating Toolbar (Shorten, Formalize, Expand, dll)."""
     try:
@@ -940,7 +1040,7 @@ def api_generate_bibliography():
         project_id = data.get('projectId')
         if not project_id: return jsonify({'error': 'No Project ID'}), 400
         
-        refs_query = firestore_db.collection('citations').where('projectId', '==', project_id).stream()
+        refs_query = app.firestore_db.collection('citations').where('projectId', '==', project_id).stream()
         references = [doc.to_dict() for doc in refs_query]
         
         # Panggil helper function
@@ -958,7 +1058,7 @@ def export_docx_endpoint():
         data = request.get_json()
         project_id = data.get('projectId')
         
-        doc_ref = firestore_db.collection('projects').document(project_id)
+        doc_ref = app.firestore_db.collection('projects').document(project_id)
         doc = doc_ref.get()
         if not doc.exists: return jsonify({'error': 'Not found'}), 404
         
@@ -1032,7 +1132,7 @@ def review_document():
         
         # Implementasi inline untuk review grammar/typo
         # (Idealnya dipindah ke AIService)
-        from litellm import completion
+        from app.utils.ai_utils import safe_completion as completion
         
         prompt = """
         You are a professional academic reviewer.
@@ -1097,9 +1197,11 @@ def logic_check_route():
 def generate_stream_endpoint():
     """
     Endpoint khusus untuk Generator Tab baru (Orchestrator).
-    Langsung menghubungkan Frontend ke ai_utils.generate_academic_draft_stream.
+    [UPGRADED] Compatibility shim yang sekarang merutekan eksekusi ke SupervisorAgent
+    agar jalur generator lama dan AgentPanel berbagi pipeline yang sama.
     """
     try:
+        logger.warning("Legacy generator route hit; prefer /api/agent/run for new writing-agent flows.")
         # 1. Cek Limit Generator
         allowed, msg = check_limits(current_user, 'generator')
         if not allowed:
@@ -1111,37 +1213,141 @@ def generate_stream_endpoint():
             return jsonify({'message': 'No input data'}), 400
 
         task_type = data.get('task', 'general')
+        project_id = data.get('projectId', '')
         
-        # 3. Construct Project Context
-        # Frontend baru mengirim key 'context_*' langsung di root payload
-        project_context = {
-            'title': data.get('context_title', ''),
-            'problem_statement': data.get('context_problem', ''),
-            'methodology': data.get('context_method', ''),
-            'variables': data.get('context_variables', ''),
-            # Tambahkan field lain jika perlu
-        }
+        # 3. THESIS BRAIN: Load Research Graph + Compile Context
+        thesis_context_str = ""
+        graph_validation = None
+        target_chapter = _detect_chapter_from_task(task_type)
+        
+        if project_id:
+            try:
+                from app.api.research_graph_api import _get_or_create_graph
+                from app.engines.thesis_context import ThesisContextCompiler
+                
+                graph = _get_or_create_graph(project_id, str(current_user.id))
+                
+                # Validate before generation
+                graph_validation = ThesisContextCompiler.validate_before_generation(
+                    graph, target_chapter
+                )
+                
+                # Compile full context
+                thesis_context_str = ThesisContextCompiler.compile(
+                    graph, target_chapter, section_type=task_type
+                )
+                
+                logger.info(f"🧠 Thesis Brain loaded for project {project_id} → {target_chapter}")
+                
+            except Exception as brain_err:
+                logger.warning(f"⚠️ Thesis Brain load failed (non-fatal): {brain_err}")
+        
+        # 4. RAG: Retrieve relevant references for this chapter
+        rag_context_str = ""
+        if project_id:
+            try:
+                from app.engines.rag_engine_v2 import build_rag_context_prompt
+                query = data.get('input_text', '') or data.get('context_problem', '') or data.get('context_title', '')
+                if query:
+                    rag_context_str = build_rag_context_prompt(
+                        project_id, query, target_chapter, n_results=5
+                    )
+                    if rag_context_str:
+                        thesis_context_str += f"\n\n{rag_context_str}"
+                        logger.info(f"📚 RAG context injected for {target_chapter}")
+            except Exception as rag_err:
+                logger.warning(f"⚠️ RAG context failed (non-fatal): {rag_err}")
 
-        # 4. Panggil AI Utils (Logic yang baru kita update)
-        # Kita passing 'data' full sebagai 'input_data' agar parameter bab (method_mode, dll) terbaca
-        result = ai_utils.generate_academic_draft_stream(
-            user=current_user,
-            task_type=task_type,
-            input_data=data, 
-            project_context=project_context,
-            # Bisa hardcode model atau biarkan default di utils
-            selected_model='free_standard', 
-            editor_context=data.get('previous_content', '')
+        if not project_id:
+            return jsonify({'message': 'projectId wajib dikirim untuk generator AI'}), 400
+
+        agent_task = _legacy_generator_task_to_agent_prompt(task_type, data, thesis_context_str)
+        supervisor = get_agent_supervisor()
+        user_id = str(current_user.id)
+        user_obj = current_user._get_current_object()
+
+        def emit(event_data: dict) -> str:
+            return f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+        @stream_with_context
+        def generate():
+            from gevent import spawn
+            from gevent.queue import Queue
+
+            event_queue = Queue()
+            worker_state = {}
+            done_sentinel = "__GENERATOR_SHIM_DONE__"
+
+            def on_event(event_type: str, payload: dict):
+                event = {"type": event_type}
+                if isinstance(payload, dict):
+                    event.update(payload)
+                event_queue.put(event)
+
+            runtime_context = dict(data or {})
+            runtime_context["projectId"] = project_id
+            runtime_context["chapterId"] = data.get("chapterId", "")
+            runtime_context["thesis_brain_context"] = thesis_context_str
+            runtime_context["rag_context"] = rag_context_str
+            runtime_context["generator_task_type"] = task_type
+            runtime_context["target_chapter"] = target_chapter
+            runtime_context["_mode"] = data.get("mode", "planning")
+
+            def worker():
+                try:
+                    worker_state["result"] = supervisor.process_request(
+                        user_id=user_id,
+                        message=agent_task,
+                        context=runtime_context,
+                        on_event=on_event,
+                    )
+                    increment_limit(user_obj, 'generator')
+                except Exception as worker_error:
+                    worker_state["error"] = str(worker_error)
+                finally:
+                    event_queue.put({"type": done_sentinel})
+
+            spawn(worker)
+
+            try:
+                emitted_text_delta = False
+                while True:
+                    event = event_queue.get()
+                    if event.get("type") == done_sentinel:
+                        break
+
+                    if event.get("type") == "TEXT_DELTA":
+                        emitted_text_delta = True
+
+                    yield emit(event)
+
+                if worker_state.get("error"):
+                    yield emit({"type": "ERROR", "message": worker_state["error"]})
+                    return
+
+                final_text = worker_state.get("result")
+                if final_text and not emitted_text_delta:
+                    yield emit({"type": "TEXT_DELTA", "delta": str(final_text)})
+
+                yield emit({"type": "DONE"})
+            except Exception as stream_err:
+                logger.error(f"Generator shim stream error: {stream_err}")
+                yield emit({"type": "ERROR", "message": f"Generator shim error: {stream_err}"})
+
+        return Response(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+                'X-OnThesis-Legacy-Route': 'true',
+                'X-OnThesis-Preferred-Route': '/api/agent/run',
+            }
         )
-
-        # 5. Catat Usage (Hanya jika stream berhasil diinisiasi)
-        increment_limit(current_user, 'generator')
-
-        return result
 
     except Exception as e:
         logger.error(f"Generate Stream Error: {e}")
-        # Return JSON error dengan status 500
         return jsonify({'message': f"Server Error: {str(e)}"}), 500
 
 
@@ -1170,3 +1376,54 @@ def orchestrator_execute():
     except Exception as e:
         logger.error(f"Orchestrator Execute Error: {e}")
         return jsonify({'error': str(e)}), 500
+
+def _detect_chapter_from_task(task_type: str) -> str:
+    """Map task_type to chapter for context compilation"""
+    task_chapter_map = {
+        # Bab 1
+        'bab1_part_ideal': 'bab1',
+        'bab1_part_factual': 'bab1',
+        'bab1_part_gap': 'bab1',
+        'bab1_part_solution': 'bab1',
+        'bab1_rumusan': 'bab1',
+        'bab1_tujuan': 'bab1',
+        'bab1_latar_belakang': 'bab1',
+        # Bab 2
+        'bab2_kajian_pustaka': 'bab2',
+        'bab2_teori': 'bab2',
+        'bab2_part_x': 'bab2',
+        'bab2_part_y': 'bab2',
+        'bab2_part_context': 'bab2',
+        'bab2_part_relation': 'bab2',
+        'bab2_part_framework': 'bab2',
+        'bab2_part_hypothesis': 'bab2',
+        'literature_review': 'bab2',
+        # Bab 3
+        'bab3_metode': 'bab3',
+        'bab3_part_approach': 'bab3',
+        'bab3_part_loc': 'bab3',
+        'bab3_part_pop': 'bab3',
+        'bab3_part_var': 'bab3',
+        'bab3_part_inst': 'bab3',
+        'bab3_part_val': 'bab3',
+        'bab3_part_ana': 'bab3',
+        'bab3_part_proc': 'bab3',
+        'methodology': 'bab3',
+        # Bab 4
+        'bab4_pembahasan': 'bab4',
+        'bab4_part_descriptive': 'bab4',
+        'bab4_part_discussion': 'bab4',
+        'bab4_part_implication': 'bab4',
+        'bab4_part_object': 'bab4',
+        'bab4_part_qualitative': 'bab4',
+        'bab4_part_prerequisite': 'bab4',
+        'bab4_part_hypothesis': 'bab4',
+        'discussion_chapter4': 'bab4',
+        # Bab 5
+        'bab5_penutup': 'bab5',
+        'bab5_part_conclusion': 'bab5',
+        'bab5_part_implication': 'bab5',
+        'bab5_part_suggestion': 'bab5',
+        'conclusion': 'bab5',
+    }
+    return task_chapter_map.get(task_type, 'bab1')

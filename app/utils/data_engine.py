@@ -179,23 +179,21 @@ class OnThesisDataset:
 
     # --- LOAD ---
     @staticmethod
-    def load(user_id, project_id='default'):
+    def load(user_id, project_id='default', load_data=True):
         instance = OnThesisDataset(user_id=user_id, project_id=project_id)
-        
-        # Strategi Load: Cek Lokal dulu (Lebih Cepat), kalau tidak ada baru Cloud
-        # Namun untuk memastikan konsistensi antar device, idealnya cek Cloud timestamp.
-        # Untuk MVP ini, kita prioritaskan Local jika ada demi kecepatan dev.
         
         local_exists = os.path.exists(instance.local_data_path) and os.path.exists(instance.local_meta_path)
         
         if local_exists:
             try:
-                print(f"📂 [LOAD] Loading from Local: {instance.local_data_path}")
-                instance.df = pd.read_csv(instance.local_data_path, low_memory=False)
-                instance._normalize_column_names()
                 with open(instance.local_meta_path, 'r', encoding='utf-8') as f:
                     meta_data = json.load(f)
                 instance._parse_meta(meta_data)
+                
+                if load_data:
+                    print(f"📂 [LOAD] Loading from Local: {instance.local_data_path}")
+                    instance.df = pd.read_csv(instance.local_data_path, low_memory=False)
+                    instance._normalize_column_names()
                 return instance
             except Exception as e:
                 print(f"⚠️ Local Load Corrupt, falling back to Cloud: {e}")
@@ -207,18 +205,20 @@ class OnThesisDataset:
                 if doc_snap.exists:
                     meta_data = doc_snap.to_dict()
                     instance._parse_meta(meta_data)
-                    data_ref = instance.doc_ref.collection('data_storage').document('main_data')
-                    data_snap = data_ref.get()
-                    if data_snap.exists:
-                        data_dict = data_snap.to_dict()
-                        rows = data_dict.get('rows', [])
-                        if rows:
-                            instance.df = pd.DataFrame(rows)
-                            instance._normalize_column_names()
                     
-                    # Setelah load dari Cloud, simpan ke lokal buat cache selanjutnya
-                    instance.save(sync_to_cloud=False) 
-                    print(f"☁️ Loaded from Firestore: {instance.project_id}")
+                    if load_data:
+                        data_ref = instance.doc_ref.collection('data_storage').document('main_data')
+                        data_snap = data_ref.get()
+                        if data_snap.exists:
+                            data_dict = data_snap.to_dict()
+                            rows = data_dict.get('rows', [])
+                            if rows:
+                                instance.df = pd.DataFrame(rows)
+                                instance._normalize_column_names()
+                        
+                        # Setelah load dari Cloud, simpan ke lokal buat cache selanjutnya
+                        instance.save(sync_to_cloud=False) 
+                        print(f"☁️ Loaded from Firestore: {instance.project_id}")
                     return instance
         except Exception as e:
             print(f"⚠️ Firestore Load Error: {e}")

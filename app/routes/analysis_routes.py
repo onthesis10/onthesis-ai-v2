@@ -6,13 +6,15 @@ from flask import Blueprint, render_template, request, jsonify, send_file, url_f
 from flask_login import login_required, current_user
 import pandas as pd
 import json
+from firebase_admin import firestore
 import logging
 
 from app.services.analysis_service import AnalysisService
 from app.utils.data_engine import OnThesisDataset
 from app.utils import general_utils, ai_utils
 from app.services.ai_service import AIService
-from app import firestore_db
+import app
+from app import limiter
 
 from datetime import datetime
 
@@ -153,14 +155,17 @@ def initialize_project():
 @analysis_bp.route('/api/variable-view/get', methods=['GET'])
 @login_required
 def get_variable_view():
-    ds = OnThesisDataset.load(current_user.id)
+    ds = OnThesisDataset.load(current_user.id, load_data=False)
     return jsonify({'variables': ds.get_variable_view_data() if ds else []})
 
 @analysis_bp.route('/api/data-view/get', methods=['GET'])
 @login_required
 def get_data_view():
     ds = OnThesisDataset.load(current_user.id)
-    return jsonify(ds.get_data_view_data() if ds else {'error': 'No data'})
+    if not ds: return jsonify({'error': 'No data'})
+    data_dict = ds.get_data_view_data()
+    data_dict['data'] = data_dict['data'][:1000] # Limit to 1000 rows max
+    return jsonify(data_dict)
 
 @analysis_bp.route('/api/data-view/update', methods=['POST'])
 @login_required
@@ -328,20 +333,20 @@ for a_type in ANALYSIS_TYPES:
 @analysis_bp.route('/api/analysis-history/get', methods=['GET'])
 @login_required
 def get_analysis_history():
-    ds = OnThesisDataset.load(current_user.id)
+    ds = OnThesisDataset.load(current_user.id, load_data=False)
     return jsonify({'history': ds.get_analysis_history() if ds else []})
 
 @analysis_bp.route('/api/analysis-history/delete/<log_id>', methods=['DELETE'])
 @login_required
 def delete_analysis_log(log_id):
-    ds = OnThesisDataset.load(current_user.id)
+    ds = OnThesisDataset.load(current_user.id, load_data=False)
     if ds: ds.delete_analysis_log(log_id); return jsonify({'status': 'success'})
     return jsonify({'error': 'Dataset not found'}), 404
 
 @analysis_bp.route('/api/analysis-history/clear', methods=['DELETE'])
 @login_required
 def clear_analysis_history():
-    ds = OnThesisDataset.load(current_user.id)
+    ds = OnThesisDataset.load(current_user.id, load_data=False)
     if ds: ds.clear_analysis_history(); return jsonify({'status': 'success'})
     return jsonify({'error': 'Dataset not found'}), 404
 
@@ -349,6 +354,7 @@ def clear_analysis_history():
 
 @analysis_bp.route('/api/interpret-result', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def interpret_result():
     try:
         data = request.get_json()
@@ -362,6 +368,7 @@ def interpret_result():
 
 @analysis_bp.route('/api/interpret-chart', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def interpret_chart_endpoint():
     try:
         data = request.get_json()
@@ -380,6 +387,7 @@ def interpret_chart_endpoint():
 
 @analysis_bp.route('/api/generate-chapter4-draft', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def generate_chapter4_draft():
     if not current_user.is_pro:
         is_allowed, msg = general_utils.check_and_update_pro_trial(firestore_db, current_user.email, 'writing_assistant')
@@ -391,11 +399,11 @@ def generate_chapter4_draft():
         stats_result = data.get('result')
         analysis_type = data.get('type')
 
-        ds = OnThesisDataset.load(current_user.id)
+        ds = OnThesisDataset.load(current_user.id, load_data=False)
         project_context = None
         if ds and ds.project_id and ds.project_id != 'default':
             try:
-                doc = firestore_db.collection('projects').document(ds.project_id).get()
+                doc = app.firestore_db.collection('projects').document(ds.project_id).get()
                 if doc.exists:
                     p_data = doc.to_dict()
                     project_context = {
@@ -430,6 +438,7 @@ def generate_chapter4_draft():
 
 @analysis_bp.route('/api/data-analyst/chat', methods=['POST'])
 @login_required
+@limiter.limit("13 per minute")
 def data_analyst_chat():
     try:
         data = request.get_json()
@@ -473,7 +482,7 @@ def save_analysis_to_project():
         if not project_id or not analysis_result:
             return jsonify({'error': 'Data tidak lengkap'}), 400
 
-        doc_ref = firestore_db.collection('projects').document(project_id)
+        doc_ref = app.firestore_db.collection('projects').document(project_id)
         doc = doc_ref.get()
         
         if not doc.exists or doc.to_dict().get('userId') != str(current_user.id):
@@ -492,6 +501,7 @@ def save_analysis_to_project():
 
 
 @analysis_bp.route('/api/ai/chat', methods=['POST'])
+@limiter.limit("13 per minute")
 def ai_chat():
     req_data = request.json
     user_msg = req_data.get('message', '')
@@ -517,6 +527,7 @@ def ai_chat():
     return Response(stream_with_context(generate()), mimetype='text/plain')
 
 @analysis_bp.route('/api/ai/defense', methods=['POST'])
+@limiter.limit("13 per minute")
 def ai_defense():
     data = request.json
     action = data.get('action', 'answer')
@@ -552,4 +563,45 @@ def save_project_manual():
             
     except Exception as e:
         logger.error(f"Save Manual Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@analysis_bp.route('/api/my-analyses', methods=['GET'])
+@login_required
+def get_my_analyses():
+    """
+    Mengambil riwayat analisis terakhir dari semua project milik user.
+    """
+    try:
+        user_id = str(current_user.id)
+        # 1. Ambil semua project user
+        projects = app.firestore_db.collection('projects')\
+            .where('userId', '==', user_id)\
+            .stream()
+        
+        all_history = []
+        for proj in projects:
+            p_data = proj.to_dict()
+            p_title = p_data.get('title', 'Project Tanpa Judul')
+            
+            # 2. Ambil sub-collection 'analyses' untuk tiap project
+            analyses = proj.reference.collection('analyses')\
+                .order_by('timestamp', direction=firestore.Query.DESCENDING)\
+                .limit(10)\
+                .stream()
+            
+            for ana in analyses:
+                a_data = ana.to_dict()
+                a_data['project_title'] = p_title
+                a_data['project_id'] = proj.id
+                all_history.append(a_data)
+        
+        # Sort by timestamp DESC
+        all_history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        return jsonify({
+            'status': 'success',
+            'history': all_history[:20] # Limit 20 terakhir
+        }), 200
+    except Exception as e:
+        logger.error(f"Get My Analyses Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500

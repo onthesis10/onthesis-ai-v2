@@ -1,28 +1,40 @@
-# File rahasia yang berisi kunci API dan kredensial
+# Secrets
 .env
 serviceAccountKey.json
 
-# Folder cache Python yang tidak perlu diunggah
+# Python
 __pycache__/
+*.pyc
+.pytest_cache/
+venv/
 
-# File-file sementara Python
-*.pyc.env
-# Library Berat (WAJIB ADA)
+# Node / build artifacts
 node_modules/
 dist/
 build/
-
-# System Files
-.DS_Store
-instance/
-__pycache__/
-*.csv
+frontend_spa/build_*.log
 .npm-local/
 frontend_analysis/.npm-local/
 npm-debug.log
 
-venv/
+# Runtime / generated output
+output/
+temp_data/
+.playwright-cli/
+*.log
+*.pdf
+logo_base64.txt
+test.txt
+.~lock.*#
 onthesis-ai-v2-source.zip
+
+# OS / editor
+.DS_Store
+instance/
+.vscode/
+
+# Data dumps
+*.csv
 
 # Excluded frontend folders (as per user request)
 frontend/

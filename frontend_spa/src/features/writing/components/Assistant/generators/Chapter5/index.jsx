@@ -1,46 +1,127 @@
 // FILE: src/components/Assistant/generators/Chapter5/index.jsx
 
 import React, { useState, useEffect } from 'react';
-import { 
-    Award, BookOpen, Lightbulb, Sparkles, RefreshCw, 
+import {
+    Award, BookOpen, Lightbulb, Sparkles, RefreshCw,
     CheckCircle2, FileText, ChevronDown, ChevronRight,
     Gauge, Link2, Target, Zap, AlertCircle, Save, ArrowRight, Trash2
 } from 'lucide-react';
 import useStreamGenerator from '../../../../hooks/useStreamGenerator';
-import { useTheme } from '../../../../context/ThemeContext'; 
+import RuleViolationBanner from '../RuleViolationBanner';
+import CitationValidatorBar from '../CitationValidatorBar';
+import { useThemeStore } from '@/store/themeStore';
+import { cn } from '@/lib/utils';
+import { useToast } from '../../../UI/ToastProvider.jsx';
 
 // --- CONFIGURATION ---
 const getSectionConfig = () => {
     return {
-        conclusion: { 
-            title: "Kesimpulan", 
+        conclusion: {
+            title: "Kesimpulan",
             subtitle: "The Verdict",
             icon: Award, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20",
             placeholder: "Sistem otomatis memetakan Rumusan Masalah vs Hipotesis...",
-            input: "", output: "" 
+            input: "", output: ""
         },
-        implication: { 
-            title: "Implikasi Penelitian", 
+        implication: {
+            title: "Implikasi Penelitian",
             subtitle: "Dampak Teoretis & Praktis",
             icon: BookOpen, color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/20",
             placeholder: "Jelaskan konsekuensi logis dari temuan ini...",
-            input: "", output: "" 
+            input: "", output: ""
         },
-        suggestion: { 
-            title: "Saran", 
+        suggestion: {
+            title: "Saran",
             subtitle: "Action Plan",
             icon: Lightbulb, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20",
             placeholder: "Rekomendasi untuk: Peneliti Selanjutnya, Guru/Praktisi, Kebijakan...",
-            input: "", output: "" 
+            input: "", output: ""
         }
     };
 };
 
 const Chapter5Generator = ({ context, onInsert }) => {
-    const { theme } = useTheme(); 
-    
+    const { theme } = useThemeStore();
+    const { addToast } = useToast();
+
+    // --- Theme Config (Matching AppSidebar.tsx) ---
+    const activeConfig = {
+        light: {
+            containerBg: "bg-white/80 text-slate-800 border-black/5 backdrop-blur-xl",
+            headerBg: "bg-white/50 border-black/5 backdrop-blur-xl",
+            subHeaderBg: "bg-black/5 border-black/5",
+            cardBg: "bg-white border-black/5 shadow-sm",
+            cardHover: "hover:bg-slate-50",
+            cardExpandedBg: "bg-slate-50",
+            textMain: "text-slate-800",
+            textMuted: "text-slate-500",
+            inputBg: "bg-white border-black/10 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400",
+            btnPrimary: "bg-[#007AFF] text-white shadow-md hover:opacity-90",
+            btnDanger: "text-slate-400 hover:text-red-500 hover:bg-red-50",
+            outputBg: "bg-white border-black/10 shadow-sm",
+            outputHeader: "bg-slate-50 border-black/5",
+            iconBg: "bg-amber-100 text-amber-600",
+            statusBadge: "bg-white border-black/5 text-slate-500",
+            pillActive: "bg-white text-blue-600 shadow-sm",
+            pillInactive: "text-slate-400 hover:text-slate-600",
+            contextDone: "text-emerald-600",
+            contextMissing: "text-slate-400",
+            contextDot: "bg-emerald-500",
+            contextDotMissing: "bg-red-500",
+            contextBadge: "bg-white border-black/5 text-slate-500",
+        },
+        dark: {
+            containerBg: "bg-[#1E293B]/80 text-slate-200 border-white/5 backdrop-blur-xl",
+            headerBg: "bg-[#1E293B]/50 border-white/10 backdrop-blur-xl",
+            subHeaderBg: "bg-black/20 border-white/5",
+            cardBg: "bg-[#0B1120]/50 border-transparent",
+            cardHover: "hover:bg-white/5",
+            cardExpandedBg: "bg-black/20",
+            textMain: "text-slate-200",
+            textMuted: "text-slate-400",
+            inputBg: "bg-[#0B1120] border-white/10 focus:ring-cyan-500/20 text-slate-200 placeholder:text-slate-500",
+            btnPrimary: "bg-[#0EA5E9] text-white shadow-[0_0_15px_-3px_rgba(14,165,233,0.5)] hover:opacity-90",
+            btnDanger: "text-slate-500 hover:text-red-400 hover:bg-red-500/10",
+            outputBg: "bg-[#0B1120] border-white/10",
+            outputHeader: "bg-[#1E293B] border-white/5",
+            iconBg: "bg-amber-500/10 text-amber-400",
+            statusBadge: "bg-black/20 border-white/5 text-slate-400",
+            pillActive: "bg-[#2B2D31] text-cyan-400 shadow-sm",
+            pillInactive: "text-slate-400 hover:text-slate-300",
+            contextDone: "text-emerald-400",
+            contextMissing: "text-slate-500",
+            contextDot: "bg-emerald-400",
+            contextDotMissing: "bg-red-500",
+            contextBadge: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+        },
+        happy: {
+            containerBg: "bg-white/80 text-stone-800 border-orange-100 backdrop-blur-xl",
+            headerBg: "bg-white/90 border-orange-100 backdrop-blur-xl",
+            subHeaderBg: "bg-orange-50/50 border-orange-100",
+            cardBg: "bg-white border-orange-50 shadow-sm",
+            cardHover: "hover:bg-orange-50/50",
+            cardExpandedBg: "bg-orange-50/30",
+            textMain: "text-stone-800",
+            textMuted: "text-stone-500",
+            inputBg: "bg-white border-orange-200 focus:ring-orange-500/20 text-stone-800 placeholder:text-stone-400",
+            btnPrimary: "bg-gradient-to-r from-orange-400 to-rose-400 text-white shadow-lg shadow-orange-500/20 hover:opacity-90",
+            btnDanger: "text-stone-400 hover:text-red-500 hover:bg-red-50",
+            outputBg: "bg-white border-orange-100 shadow-sm",
+            outputHeader: "bg-orange-50/80 border-orange-100",
+            iconBg: "bg-orange-100 text-orange-500",
+            statusBadge: "bg-white border-orange-100 text-stone-500",
+            pillActive: "bg-white text-orange-500 shadow-sm border border-orange-100",
+            pillInactive: "text-stone-400 hover:text-stone-600",
+            contextDone: "text-emerald-600",
+            contextMissing: "text-stone-400",
+            contextDot: "bg-emerald-500",
+            contextDotMissing: "bg-red-500",
+            contextBadge: "bg-white border-orange-100 text-stone-500",
+        }
+    }[theme || 'dark'];
+
     // 1. SETUP ENGINE
-    const [lengthMode, setLengthMode] = useState('standard'); 
+    const [lengthMode, setLengthMode] = useState('standard');
 
     // 2. STATE
     const [sections, setSections] = useState(() => getSectionConfig());
@@ -50,8 +131,8 @@ const Chapter5Generator = ({ context, onInsert }) => {
     // Context Data
     const [problemStatement, setProblemStatement] = useState("");
     const [findingsSummary, setFindingsSummary] = useState("");
-    
-    const { generatedContent, isGenerating, generateStream, stopGeneration } = useStreamGenerator();
+
+    const { generatedContent, isGenerating, generateStream, stopGeneration, triggerSnapshot } = useStreamGenerator();
 
     // --- EFFECTS ---
     // A. Auto-Fetch Context
@@ -62,18 +143,18 @@ const Chapter5Generator = ({ context, onInsert }) => {
             try {
                 const parsed = JSON.parse(ch1);
                 const rumusan = parsed.rumusan?.output || parsed.rumusan?.input || "";
-                setProblemStatement(rumusan.substring(0, 1000)); 
-            } catch (e) {}
+                setProblemStatement(rumusan.substring(0, 1000));
+            } catch (e) { }
         }
         const ch4 = localStorage.getItem(`onthesis_draft_bab4_${context.id}`);
         if (ch4) {
             try {
                 const parsed = JSON.parse(ch4);
-                const hipotesis = parsed.hipotesis?.output || ""; 
+                const hipotesis = parsed.hipotesis?.output || "";
                 const pembahasan = parsed.pembahasan?.output || "";
                 const summary = `KEPUTUSAN HIPOTESIS: ${hipotesis}\n\nINTISARI PEMBAHASAN: ${pembahasan}`;
-                setFindingsSummary(summary.substring(0, 1500)); 
-            } catch (e) {}
+                setFindingsSummary(summary.substring(0, 1500));
+            } catch (e) { }
         }
     }, [context?.id]);
 
@@ -92,7 +173,7 @@ const Chapter5Generator = ({ context, onInsert }) => {
                     });
                     return next;
                 });
-            } catch (e) {}
+            } catch (e) { }
         }
     }, [context?.id]);
 
@@ -110,11 +191,14 @@ const Chapter5Generator = ({ context, onInsert }) => {
                 ...prev, [activeGenSection]: { ...prev[activeGenSection], output: generatedContent }
             }));
         }
+        if (activeGenSection && !isGenerating && generatedContent) {
+            triggerSnapshot(context?.id, 'bab5', sections);
+        }
     }, [generatedContent, isGenerating, activeGenSection]);
 
     // --- HANDLERS ---
     const getTargetWordCount = (key, level) => {
-        const base = 250; 
+        const base = 250;
         const multiplier = level === 'deep' ? 1.5 : (level === 'killer' ? 2.0 : 1.0);
         return Math.round(base * multiplier).toString();
     };
@@ -123,7 +207,7 @@ const Chapter5Generator = ({ context, onInsert }) => {
     const toggleExpand = (key) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     const handleResetSection = (key) => {
-        if(window.confirm("Reset draft?")) setSections(prev => ({ ...prev, [key]: { ...prev[key], input: "", output: "" } }));
+        if (window.confirm("Reset draft?")) setSections(prev => ({ ...prev, [key]: { ...prev[key], input: "", output: "" } }));
     };
 
     const handleGenerateSection = (key) => {
@@ -131,7 +215,7 @@ const Chapter5Generator = ({ context, onInsert }) => {
         setExpandedSections(prev => ({ ...prev, [key]: true }));
 
         if (key === 'conclusion' && !problemStatement && !sections[key].input.trim()) {
-            alert("Rumusan masalah tidak ditemukan. Isi manual.");
+            addToast("Rumusan masalah tidak ditemukan. Isi manual.", 'error');
             return;
         }
 
@@ -142,49 +226,45 @@ const Chapter5Generator = ({ context, onInsert }) => {
 
         generateStream({
             task: taskType,
+            projectId: context.id,
             context_title: context.title,
-            input_text: sections[key].input, 
+            input_text: sections[key].input,
             depth_level: lengthMode,
             word_count: getTargetWordCount(key, lengthMode),
-            chapter1_problem: problemStatement, 
+            chapter1_problem: problemStatement,
             chapter4_summary: findingsSummary
         });
     };
 
     const handleInsertPart = (key) => { if (sections[key].output && onInsert) onInsert(sections[key].output); };
 
-    // System Status Logic
-    const isReady = problemStatement && findingsSummary;
-
     return (
-        // CONTAINER: Flush, Theme Aware (VS Code Style)
-        <div className="flex flex-col h-full bg-white dark:bg-[#18181B] text-gray-800 dark:text-[#CCCCCC] font-sans text-[13px] border-l border-gray-200 dark:border-white/5 transition-colors duration-300 relative">
-            
-            {/* 1. HEADER (Flush & Integrated) */}
-            <div className="border-b border-gray-200 dark:border-white/5 bg-white dark:bg-[#18181B] flex flex-col shrink-0 sticky top-0 z-20">
-                
+        <div className={cn("flex flex-col h-full font-sans text-[13px] border-l transition-colors duration-300 relative", activeConfig.containerBg)}>
+
+            {/* 1. HEADER */}
+            <div className={cn("border-b flex flex-col shrink-0 sticky top-0 z-20", activeConfig.headerBg)}>
+
                 {/* Top Row: Title */}
                 <div className="px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="p-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-                            <Award size={12} />
+                        <div className={cn("p-1.5 rounded-lg", activeConfig.iconBg)}>
+                            <Award size={14} />
                         </div>
-                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest">
+                        <span className={cn("text-xs font-bold uppercase tracking-widest", activeConfig.textMain)}>
                             Kesimpulan & Saran
                         </span>
                     </div>
 
-                    {/* Depth Mode Selector (Small Pill) */}
-                    <div className="flex bg-gray-100 dark:bg-[#202023] rounded-sm p-0.5 border border-gray-200 dark:border-white/5">
+                    {/* Depth Mode Selector */}
+                    <div className={cn("flex rounded-lg p-0.5 border", activeConfig.subHeaderBg)}>
                         {['standard', 'deep', 'killer'].map((level) => (
                             <button
                                 key={level}
                                 onClick={() => setLengthMode(level)}
-                                className={`px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase transition-all ${
-                                    lengthMode === level 
-                                    ? 'bg-white dark:bg-[#2B2D31] text-amber-600 dark:text-amber-400 shadow-sm' 
-                                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                                }`}
+                                className={cn(
+                                    "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all",
+                                    lengthMode === level ? activeConfig.pillActive : activeConfig.pillInactive
+                                )}
                             >
                                 {level === 'standard' ? 'STD' : level === 'deep' ? 'DEEP' : 'KILLER'}
                             </button>
@@ -193,109 +273,116 @@ const Chapter5Generator = ({ context, onInsert }) => {
                 </div>
 
                 {/* System Status Bar */}
-                <div className="px-4 py-1.5 bg-gray-50 dark:bg-[#202023] border-t border-gray-200 dark:border-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-[9px]">
-                        <span className="text-gray-500 dark:text-gray-400 font-medium">Context Check:</span>
+                <div className={cn("px-4 py-2 border-t flex items-center justify-between", activeConfig.subHeaderBg)}>
+                    <div className={cn("flex items-center gap-2 text-[10px]", activeConfig.textMuted)}>
+                        <span className="font-medium">Context:</span>
                         <div className="flex items-center gap-1">
-                            <div className={`w-1.5 h-1.5 rounded-full ${problemStatement ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                            <span className={problemStatement ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"}>Rumusan</span>
+                            <div className={cn("w-2 h-2 rounded-full", problemStatement ? activeConfig.contextDot : activeConfig.contextDotMissing)}></div>
+                            <span className={problemStatement ? activeConfig.contextDone : activeConfig.contextMissing}>Rumusan</span>
                         </div>
-                        <span className="text-gray-300 dark:text-gray-600">|</span>
+                        <span className={activeConfig.textMuted}>|</span>
                         <div className="flex items-center gap-1">
-                            <div className={`w-1.5 h-1.5 rounded-full ${findingsSummary ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                            <span className={findingsSummary ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"}>Hipotesis</span>
+                            <div className={cn("w-2 h-2 rounded-full", findingsSummary ? activeConfig.contextDot : activeConfig.contextDotMissing)}></div>
+                            <span className={findingsSummary ? activeConfig.contextDone : activeConfig.contextMissing}>Hipotesis</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1 text-[9px] text-gray-400">
-                        <Save size={10} className="text-emerald-500"/> Auto-Saved
+                    <div className={cn("flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium", activeConfig.statusBadge)}>
+                        <Save size={10} className={theme === 'happy' ? "text-orange-500" : "text-emerald-500"} /> Auto-Saved
                     </div>
                 </div>
             </div>
 
+            {/* RULE VIOLATIONS */}
+            <RuleViolationBanner projectId={context?.id} chapter="bab5" />
+
             {/* 2. SCROLLABLE LIST */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <div className="divide-y divide-gray-100 dark:divide-white/5">
-                    
+                <div className={cn("divide-y", theme === 'dark' ? "divide-white/5" : "divide-black/5")}>
+
                     {Object.entries(sections).map(([key, section]) => {
                         const isExpanded = expandedSections[key];
                         const isWriting = activeGenSection === key && isGenerating;
                         const hasOutput = !!section.output;
 
                         return (
-                            <div key={key} className="group transition-all">
-                                
+                            <div key={key} className="group transition-all duration-300">
+
                                 {/* HEADER */}
-                                <div 
+                                <div
                                     onClick={() => toggleExpand(key)}
-                                    className={`px-4 py-3.5 cursor-pointer flex items-center justify-between transition-colors hover:bg-gray-50 dark:hover:bg-[#202023] ${
-                                        isExpanded ? 'bg-gray-50 dark:bg-[#202023]' : 'bg-white dark:bg-[#18181B]'
-                                    }`}
+                                    className={cn(
+                                        "px-4 py-3.5 cursor-pointer flex items-center justify-between transition-colors",
+                                        isExpanded ? activeConfig.cardExpandedBg : [activeConfig.cardBg, activeConfig.cardHover]
+                                    )}
                                 >
                                     <div className="flex items-center gap-3.5">
-                                        <div className={`p-1.5 rounded-md ${section.bg} ${section.color} border ${section.border}`}>
-                                            <section.icon size={14} strokeWidth={2.5} />
+                                        <div className={`p-1.5 rounded-lg ${section.bg} ${section.color} border ${section.border} shadow-sm`}>
+                                            <section.icon size={16} strokeWidth={2.5} />
                                         </div>
                                         <div>
-                                            <div className="text-[12px] font-bold text-gray-800 dark:text-gray-200 leading-none mb-1">
+                                            <div className={cn("text-[13px] font-bold leading-none mb-1", activeConfig.textMain)}>
                                                 {section.title}
                                             </div>
-                                            <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium opacity-80">
+                                            <div className={cn("text-[11px] font-medium opacity-80", activeConfig.textMuted)}>
                                                 {section.subtitle}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-amber-500' : ''}`}>
-                                        <ChevronDown size={14} />
+                                    <div className={cn("transition-transform duration-200", activeConfig.textMuted, isExpanded ? 'rotate-180 text-blue-500' : '')}>
+                                        <ChevronDown size={16} />
                                     </div>
                                 </div>
 
                                 {/* BODY */}
                                 {isExpanded && (
-                                    <div className="px-4 pb-5 pt-1 bg-gray-50 dark:bg-[#202023] animate-in slide-in-from-top-1">
-                                        
+                                    <div className={cn("px-4 pb-5 pt-2 animate-in slide-in-from-top-1", activeConfig.cardExpandedBg)}>
+
                                         {/* INPUT AREA */}
                                         <div className="relative group/input mt-1 shadow-sm">
                                             {/* Smart Context Indicator */}
                                             {key === 'conclusion' && problemStatement && (
-                                                <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-white dark:bg-[#2B2D31] border border-gray-200 dark:border-white/10 rounded-sm text-[9px] text-gray-500 dark:text-gray-400 flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity cursor-help" title={problemStatement}>
-                                                    <Target size={10} className="text-emerald-500"/>
+                                                <div className={cn("absolute top-2 right-2 z-10 px-2 py-1 rounded-lg text-[9px] flex items-center gap-1 border opacity-70 hover:opacity-100 transition-opacity cursor-help", activeConfig.contextBadge)} title={problemStatement}>
+                                                    <Target size={10} className={theme === 'happy' ? "text-orange-500" : "text-emerald-500"} />
                                                     <span className="truncate max-w-[100px]">Matching Problem</span>
                                                 </div>
                                             )}
 
                                             <textarea
-                                                className="w-full bg-white dark:bg-[#18181B] border border-gray-200 dark:border-white/10 rounded-md px-3 py-3 text-[12px] text-gray-700 dark:text-gray-300 placeholder:text-gray-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none resize-none min-h-[90px] pb-10 transition-all leading-relaxed custom-scrollbar font-normal"
+                                                className={cn(
+                                                    "w-full rounded-xl px-4 py-3 text-[13px] outline-none resize-none min-h-[90px] pb-12 transition-all leading-relaxed custom-scrollbar font-medium border focus:ring-2",
+                                                    activeConfig.inputBg
+                                                )}
                                                 placeholder={section.placeholder}
                                                 value={section.input}
                                                 onChange={(e) => handleInputChange(key, e.target.value)}
                                             />
-                                            
+
                                             {/* ACTIONS */}
-                                            <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-90 hover:opacity-100 transition-opacity">
+                                            <div className="absolute bottom-2.5 right-2.5 flex gap-2 opacity-90 hover:opacity-100 transition-opacity">
                                                 {/* Clear */}
                                                 {(section.input || section.output) && !isWriting && (
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); handleResetSection(key); }}
-                                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-md transition-all"
+                                                        className={cn("p-1.5 rounded-lg transition-all", activeConfig.btnDanger)}
                                                     >
-                                                        <Trash2 size={12} />
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 )}
 
-                                                {/* Generate Button (Amber Theme) */}
+                                                {/* Generate Button */}
                                                 {isWriting ? (
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); stopGeneration(); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1 bg-red-50 dark:bg-red-900/10 text-red-500 border border-red-200 dark:border-red-900/30 rounded-md text-[10px] font-bold hover:bg-red-100 dark:hover:bg-red-900/20 transition-all"
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-all cursor-pointer"
                                                     >
-                                                        <RefreshCw size={10} className="animate-spin"/> Stop
+                                                        <RefreshCw size={12} className="animate-spin" /> Stop
                                                     </button>
                                                 ) : (
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); handleGenerateSection(key); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-md text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-amber-500"
+                                                        className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all border-transparent active:scale-95", activeConfig.btnPrimary)}
                                                     >
-                                                        <Sparkles size={11} fill="currentColor"/>
+                                                        <Sparkles size={12} fill="currentColor" />
                                                         {section.output ? 'Verdict Again' : 'Verdict'}
                                                     </button>
                                                 )}
@@ -304,31 +391,37 @@ const Chapter5Generator = ({ context, onInsert }) => {
 
                                         {/* OUTPUT PREVIEW */}
                                         {(hasOutput || isWriting) && (
-                                            <div className="mt-4 border border-gray-200 dark:border-white/10 rounded-md overflow-hidden bg-white dark:bg-[#18181B] shadow-sm">
-                                                <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-[#252526] border-b border-gray-200 dark:border-white/5">
-                                                    <span className="text-[9px] font-bold text-gray-500 uppercase flex items-center gap-1.5 tracking-wider">
-                                                        <FileText size={10}/> AI Verdict Draft
+                                            <div className={cn("mt-4 rounded-xl overflow-hidden border", activeConfig.outputBg)}>
+                                                <div className={cn("flex items-center justify-between px-4 py-2.5 border-b", activeConfig.outputHeader)}>
+                                                    <span className={cn("text-[10px] font-bold uppercase flex items-center gap-2 tracking-widest", activeConfig.textMuted)}>
+                                                        <div className={`w-2 h-2 rounded-full ${isWriting ? (theme === 'happy' ? 'bg-orange-400 animate-pulse' : 'bg-cyan-400 animate-pulse') : (theme === 'happy' ? 'bg-orange-500' : 'bg-emerald-500')}`}></div>
+                                                        AI Verdict Draft
                                                     </span>
-                                                    
+
                                                     {!isWriting && (
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleInsertPart(key)}
-                                                            className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                                                            className={cn("flex items-center gap-1.5 text-[11px] font-bold transition-colors", theme === 'happy' ? 'text-orange-500 hover:text-orange-600' : 'text-emerald-500 hover:text-emerald-400')}
                                                         >
-                                                            Insert <ArrowRight size={12}/>
+                                                            Insert <ArrowRight size={14} />
                                                         </button>
                                                     )}
                                                 </div>
 
-                                                <div className="p-4 max-h-[250px] overflow-y-auto custom-scrollbar">
-                                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                                        <div 
-                                                            className="text-[12px] leading-[1.7] text-gray-600 dark:text-gray-300 font-normal whitespace-pre-wrap font-sans"
-                                                            dangerouslySetInnerHTML={{ __html: section.output }} 
+                                                <div className="p-5 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                    <div className={cn("prose prose-sm max-w-none", theme === 'dark' ? "prose-invert" : "prose-slate")}>
+                                                        <div
+                                                            className={cn("text-[13px] leading-relaxed font-medium whitespace-pre-wrap font-sans", activeConfig.textMain)}
+                                                            dangerouslySetInnerHTML={{ __html: section.output }}
                                                         />
-                                                        {isWriting && <span className="inline-block w-1.5 h-3 bg-amber-500 ml-1 animate-pulse align-middle rounded-sm"/>}
+                                                        {isWriting && <span className={cn("inline-block w-2 h-4 ml-1 animate-pulse align-middle rounded-sm", theme === 'happy' ? 'bg-orange-400' : 'bg-cyan-500')} />}
                                                     </div>
                                                 </div>
+
+                                                {/* Citation Validator */}
+                                                {hasOutput && !isWriting && (
+                                                    <CitationValidatorBar projectId={context?.id} generatedText={section.output} />
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -337,7 +430,7 @@ const Chapter5Generator = ({ context, onInsert }) => {
                         );
                     })}
                 </div>
-                <div className="h-16"></div>
+                <div className="h-20"></div>
             </div>
         </div>
     );

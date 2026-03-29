@@ -16,13 +16,15 @@ logger = logging.getLogger(__name__)
 def login_page():
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
-    return render_template('login.html')
+    # Login sudah di-migrate ke SPA (AuthPage.tsx)
+    # Serve spa.html agar React Router yang handle /login
+    return render_template('spa.html')
 
 @auth_bp.route('/logout')
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('auth.login_page'))
+    return redirect('/login')
 
 # --- SERVICE METHODS (Helper Internal) ---
 def _get_or_create_user(uid, email, photo_url, display_name):
@@ -112,12 +114,11 @@ def verify_email_token():
         return jsonify({'error': "Terjadi kesalahan internal server."}), 500
 
 @auth_bp.route('/api/user/me', methods=['GET'])
-@login_required
 def get_current_user_api():
     """API untuk mengambil data user yang sedang login."""
     try:
         if not current_user.is_authenticated:
-            return jsonify({'error': 'Unauthorized'}), 401
+            return jsonify({'status': 'unauthorized', 'user': None}), 200
             
         return jsonify({
             'status': 'success',

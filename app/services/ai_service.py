@@ -1,19 +1,22 @@
 # app/services/ai_service.py
 
 import json
+import uuid
 import re
 import logging
 import os
 from io import BytesIO
 from app.utils import ai_utils
-from groq import Groq
+import PyPDF2
+from docx import Document
 import litellm
-from litellm import completion
+from groq import Groq
+from app.utils.ai_utils import safe_completion as completion
 
 litellm.drop_params = True
 
 from app.utils.ai_utils import get_smart_model, clean_json_output
-
+from app.engines.rule_engine import AcademicRuleEngine
 
 
 # Setup Logger

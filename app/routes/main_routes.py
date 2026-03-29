@@ -81,6 +81,12 @@ def paraphrase_page():
 def chat_ai():
     return render_template('chat_ai.html')
 
+@main_bp.route('/pricing')
+@login_required
+def pricing_page():
+    firebase_custom_token = getattr(current_user, 'firebase_custom_token', None)
+    return render_template('spa.html', firebase_custom_token=firebase_custom_token)
+
 @main_bp.route('/upgrade')
 @login_required
 def upgrade_page():
@@ -209,19 +215,39 @@ def api_unified_search():
         data = request.get_json()
         query = data.get('query')
         if not query: return jsonify({"error": "Query kosong"}), 400
+        sources = data.get('sources')
+        year = data.get('year')
+
+        logger.info(
+            "Reference search request: endpoint=%s route=%s module=%s search_utils=%s user_id=%s query=%r sources=%s year=%s",
+            request.endpoint,
+            request.path,
+            __file__,
+            getattr(search_utils, "__file__", "unknown"),
+            getattr(current_user, "id", "anonymous"),
+            query,
+            sources,
+            year,
+        )
 
         # CCTV Log
         general_utils.log_user_activity(firestore_db, current_user.id, 'search', {'query': query})
 
         results = search_utils.unified_search(
             query=query,
-            sources=data.get('sources'),
-            year=data.get('year')
+            sources=sources,
+            year=year
+        )
+        logger.info(
+            "Reference search completed: endpoint=%s results=%s query=%r",
+            request.endpoint,
+            len(results) if isinstance(results, list) else "unknown",
+            query,
         )
         return jsonify({"message": "Success", "results": results}), 200
 
     except Exception as e:
-        logger.error(f"Search API Error: {e}")
+        logger.exception("Search API Error")
         return jsonify({'error': str(e)}), 500
 
 

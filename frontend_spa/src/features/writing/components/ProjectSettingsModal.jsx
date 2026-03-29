@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-    X, User, Target, BookOpen, Settings, 
-    Save, CheckCircle2, ChevronRight, LayoutGrid, Check, ChevronDown, Loader2 
+import {
+    X, User, Target, BookOpen, Settings,
+    Save, CheckCircle2, ChevronRight, LayoutGrid, Check, ChevronDown, Loader2, Puzzle, Sparkles, RefreshCw
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext.jsx';
+import PluginManager from './PluginManager.jsx';
+import FieldWithAI from './FieldWithAI.jsx';
+import { api } from '../api/client.js';
 
 // --- 1. CUSTOM SELECT COMPONENT (Safe Mode) ---
 const CustomSelect = ({ label, name, value, options, onChange }) => {
@@ -24,7 +27,7 @@ const CustomSelect = ({ label, name, value, options, onChange }) => {
     }, []);
 
     // Fallback safe jika value undefined
-    const safeValue = value || options[0]?.value; 
+    const safeValue = value || options[0]?.value;
     const selectedOption = options.find(opt => opt.value === safeValue) || options[0];
 
     const handleSelect = (optionValue) => {
@@ -35,30 +38,29 @@ const CustomSelect = ({ label, name, value, options, onChange }) => {
     return (
         <div className="relative" ref={containerRef}>
             {label && <label className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide ml-1 mb-1.5 block">{label}</label>}
-            
-            <div 
-                onClick={() => setIsOpen(!isOpen)} 
+
+            <div
+                onClick={() => setIsOpen(!isOpen)}
                 className={`w-full flex items-center justify-between bg-white dark:bg-white/5 border text-gray-800 dark:text-gray-100 text-[13px] p-2.5 rounded-lg outline-none transition-all cursor-pointer ${isOpen ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'}`}
             >
                 <span className="truncate">{selectedOption?.label || "Pilih..."}</span>
-                <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
             </div>
 
             {isOpen && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-[#252525] border border-gray-100 dark:border-white/10 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 max-h-[200px] overflow-y-auto custom-scrollbar">
                     <div className="p-1">
                         {options.map((option) => (
-                            <div 
+                            <div
                                 key={option.value}
                                 onClick={() => handleSelect(option.value)}
-                                className={`px-3 py-2 rounded-md text-[13px] cursor-pointer flex items-center justify-between transition-colors ${
-                                    safeValue === option.value 
-                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' 
+                                className={`px-3 py-2 rounded-md text-[13px] cursor-pointer flex items-center justify-between transition-colors ${safeValue === option.value
+                                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium'
                                     : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5'
-                                }`}
+                                    }`}
                             >
                                 {option.label}
-                                {safeValue === option.value && <Check size={14} className="opacity-70"/>}
+                                {safeValue === option.value && <Check size={14} className="opacity-70" />}
                             </div>
                         ))}
                     </div>
@@ -78,8 +80,10 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
         student_name: '', university: '', degree_level: 'S1', title: '',
         problem_statement: '', research_objectives: '', significance: '',
         theoretical_framework: '', variables_indicators: '',
-        methodology: 'quantitative', population_sample: '', data_analysis: ''
+        methodology: 'quantitative', population_sample: '', data_analysis: '',
+        study_field: '', hypothesis: '', keywords: '', scope_limitations: ''
     });
+    const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
     // SYNC DATA SAAT MODAL DIBUKA
     useEffect(() => {
@@ -96,7 +100,11 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
                 variables_indicators: project.variables_indicators || '',
                 methodology: project.methodology || 'quantitative',
                 population_sample: project.population_sample || '',
-                data_analysis: project.data_analysis || ''
+                data_analysis: project.data_analysis || '',
+                study_field: project.study_field || '',
+                hypothesis: project.hypothesis || '',
+                keywords: project.keywords || '',
+                scope_limitations: project.scope_limitations || ''
             });
         }
     }, [isOpen, project]);
@@ -113,11 +121,44 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
         onClose();
     };
 
+    const handleAutoFill = async () => {
+        if (!formData.title || !formData.study_field || !formData.methodology) return;
+        setIsGeneratingAll(true);
+        try {
+            const context = {
+                title: formData.title,
+                study_field: formData.study_field,
+                research_type: formData.methodology,
+                problem_statement: formData.problem_statement,
+                research_objectives: formData.research_objectives,
+                variables: formData.variables_indicators
+            };
+            const res = await api.post('/api/ai/generate-all', { context });
+            if (res.status === 'success' && res.results) {
+                setFormData(prev => ({
+                    ...prev,
+                    problem_statement: res.results.problem_statement || prev.problem_statement,
+                    research_objectives: res.results.research_objectives || prev.research_objectives,
+                    hypothesis: res.results.hypothesis || prev.hypothesis,
+                    significance: res.results.significance || prev.significance,
+                    theoretical_framework: res.results.theoretical_framework || prev.theoretical_framework,
+                    keywords: res.results.keywords || prev.keywords,
+                    scope_limitations: res.results.scope_limitations || prev.scope_limitations
+                }));
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsGeneratingAll(false);
+        }
+    };
+
     const tabs = [
         { id: 'identity', label: 'Identitas & Judul', icon: User },
         { id: 'problem', label: 'Masalah & Tujuan', icon: Target },
         { id: 'theory', label: 'Landasan Teori', icon: BookOpen },
         { id: 'method', label: 'Metodologi', icon: LayoutGrid },
+        { id: 'plugins', label: 'Extensions', icon: Puzzle },
     ];
 
     const inputClass = "w-full bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-800 dark:text-gray-100 text-[13px] p-2.5 rounded-lg outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400";
@@ -141,9 +182,9 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
     // Gunakan Portal agar Z-Index tidak tertutup Sidebar
     return createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200 font-sans">
-            
+
             <div className="w-full max-w-4xl h-[80vh] bg-[#F5F5F7] dark:bg-[#1E1E1E] border border-gray-200/50 dark:border-white/10 rounded-2xl shadow-2xl flex overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-black/5">
-                
+
                 {/* A. SIDEBAR MENU */}
                 <div className="w-64 bg-[#F5F5F7] dark:bg-[#252525] border-r border-gray-200 dark:border-black/20 flex flex-col shrink-0">
                     <div className="h-14 px-5 flex items-center border-b border-gray-200/50 dark:border-white/5 shrink-0">
@@ -161,11 +202,10 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 ${
-                                        isActive 
-                                        ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' 
+                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-200 ${isActive
+                                        ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20'
                                         : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/5'
-                                    }`}
+                                        }`}
                                 >
                                     <Icon size={16} className={isActive ? 'text-white' : 'text-gray-500 dark:text-gray-400'} />
                                     <span className="text-xs font-medium flex-1">{tab.label}</span>
@@ -178,13 +218,31 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
 
                 {/* B. CONTENT AREA */}
                 <div className="flex-1 flex flex-col bg-white dark:bg-[#1C1C1E] min-w-0">
-                    
+
                     {/* Header */}
                     <div className="h-14 px-8 border-b border-gray-100 dark:border-white/5 flex items-center justify-between shrink-0 bg-white/50 dark:bg-white/5 backdrop-blur-xl">
                         <h2 className="text-base font-bold text-gray-800 dark:text-white truncate">
                             {tabs.find(t => t.id === activeTab)?.label}
                         </h2>
                         <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleAutoFill}
+                                disabled={!formData.title || !formData.study_field || !formData.methodology || isGeneratingAll}
+                                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md transition-all ${(!formData.title || !formData.study_field || !formData.methodology)
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-white/5 dark:text-gray-500'
+                                    : isGeneratingAll
+                                        ? 'bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 cursor-wait'
+                                        : 'bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white shadow-md shadow-purple-500/20'
+                                    }`}
+                                title="Isi otomatis field kosong menggunakan AI"
+                            >
+                                {isGeneratingAll ? (
+                                    <><RefreshCw size={14} className="animate-spin" /> Sedang Generate...</>
+                                ) : (
+                                    <><Sparkles size={14} /> Auto-fill dari judul</>
+                                )}
+                            </button>
+
                             {isSaving && (
                                 <span className="text-[10px] text-orange-500 font-bold flex items-center gap-1 animate-pulse">
                                     <Loader2 size={12} className="animate-spin" /> Menyimpan...
@@ -199,9 +257,9 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
                     {/* Form Content */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
                         <div className="max-w-2xl mx-auto space-y-8">
-                            
+
                             {/* PENTING: Tambahkan || '' di setiap value agar tidak crash uncontrolled */}
-                            
+
                             {activeTab === 'identity' && (
                                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                                     <div className="grid grid-cols-2 gap-5">
@@ -218,6 +276,10 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
                                         <input className={inputClass} name="university" value={formData.university || ''} onChange={handleChange} placeholder="Nama Universitas..." />
                                     </div>
                                     <div>
+                                        <label className={labelClass}>Program Studi Terkait (PENTING UNTUK AI)</label>
+                                        <input className={inputClass} name="study_field" value={formData.study_field || ''} onChange={handleChange} placeholder="Sistem Informasi, Manajemen, dll..." />
+                                    </div>
+                                    <div>
                                         <label className={labelClass}>Judul Penelitian</label>
                                         <textarea className={`${textAreaClass} min-h-[100px]`} name="title" value={formData.title || ''} onChange={handleChange} placeholder="Tulis judul lengkap skripsi/tesis..." />
                                     </div>
@@ -226,31 +288,79 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
 
                             {activeTab === 'problem' && (
                                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                                    <div>
-                                        <label className={labelClass}>Rumusan Masalah</label>
-                                        <textarea className={`${textAreaClass} min-h-[120px]`} name="problem_statement" value={formData.problem_statement || ''} onChange={handleChange} placeholder="Daftar pertanyaan penelitian..." />
-                                    </div>
-                                    <div>
-                                        <label className={labelClass}>Tujuan Penelitian</label>
-                                        <textarea className={`${textAreaClass} min-h-[100px]`} name="research_objectives" value={formData.research_objectives || ''} onChange={handleChange} placeholder="Tujuan yang ingin dicapai..." />
-                                    </div>
-                                    <div>
-                                        <label className={labelClass}>Signifikansi / Manfaat</label>
-                                        <textarea className={`${textAreaClass} min-h-[80px]`} name="significance" value={formData.significance || ''} onChange={handleChange} placeholder="Manfaat teoritis & praktis..." />
-                                    </div>
+                                    <FieldWithAI
+                                        label="Rumusan Masalah"
+                                        name="problem_statement"
+                                        value={formData.problem_statement}
+                                        onChange={handleChange}
+                                        placeholder="Daftar pertanyaan penelitian..."
+                                        aiFieldType="problem_statement"
+                                    />
+                                    <FieldWithAI
+                                        label="Tujuan Penelitian"
+                                        name="research_objectives"
+                                        value={formData.research_objectives}
+                                        onChange={handleChange}
+                                        placeholder="Tujuan yang ingin dicapai..."
+                                        aiFieldType="research_objectives"
+                                        minHeight="100px"
+                                    />
+                                    <FieldWithAI
+                                        label="Signifikansi / Manfaat"
+                                        name="significance"
+                                        value={formData.significance}
+                                        onChange={handleChange}
+                                        placeholder="Manfaat teoritis & praktis..."
+                                        aiFieldType="significance"
+                                        minHeight="100px"
+                                    />
+                                    <FieldWithAI
+                                        label="Batasan Masalah (Scope)"
+                                        name="scope_limitations"
+                                        value={formData.scope_limitations}
+                                        onChange={handleChange}
+                                        placeholder="Cakupan dan batasan penelitian..."
+                                        aiFieldType="scope_limitations"
+                                        minHeight="80px"
+                                    />
                                 </div>
                             )}
 
                             {activeTab === 'theory' && (
                                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                                    <div>
-                                        <label className={labelClass}>Grand Theory</label>
-                                        <textarea className={`${textAreaClass} min-h-[100px]`} name="theoretical_framework" value={formData.theoretical_framework || ''} onChange={handleChange} placeholder="Teori utama yang digunakan..." />
-                                    </div>
+                                    <FieldWithAI
+                                        label="Kata Kunci (Keywords)"
+                                        name="keywords"
+                                        value={formData.keywords}
+                                        onChange={handleChange}
+                                        placeholder="Pisahkan dengan koma..."
+                                        aiFieldType="keywords"
+                                        minHeight="40px"
+                                    />
+                                    <FieldWithAI
+                                        label="Grand Theory"
+                                        name="theoretical_framework"
+                                        value={formData.theoretical_framework}
+                                        onChange={handleChange}
+                                        placeholder="Teori utama yang digunakan..."
+                                        aiFieldType="theoretical_framework"
+                                        minHeight="100px"
+                                    />
                                     <div>
                                         <label className={labelClass}>Variabel & Indikator</label>
                                         <textarea className={`${textAreaClass} min-h-[120px]`} name="variables_indicators" value={formData.variables_indicators || ''} onChange={handleChange} placeholder="Definisi operasional variabel..." />
                                     </div>
+                                    {formData.methodology.includes('quantitative') && (
+                                        <FieldWithAI
+                                            label="Hipotesis"
+                                            name="hypothesis"
+                                            value={formData.hypothesis}
+                                            onChange={handleChange}
+                                            placeholder="Rumusan H0 dan H1..."
+                                            aiFieldType="hypothesis"
+                                            minHeight="80px"
+                                        />
+                                    )}
                                 </div>
                             )}
 
@@ -269,6 +379,12 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
                                     </div>
                                 </div>
                             )}
+
+                            {activeTab === 'plugins' && (
+                                <div className="animate-in slide-in-from-right-4 duration-300">
+                                    <PluginManager />
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -277,13 +393,13 @@ export default function ProjectSettingsModal({ isOpen, onClose }) {
                         <button onClick={onClose} className="px-5 py-2 text-xs font-bold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white transition-colors rounded-lg">
                             Batal
                         </button>
-                        <button onClick={handleSave} className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/20 flex items-center gap-2 active:scale-95 transform">
+                        <button onClick={handleSave} className="px-6 py-2 bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-sky-500/20 flex items-center gap-2 active:scale-95 transform">
                             <Save size={14} /> Simpan
                         </button>
                     </div>
                 </div>
             </div>
-        </div>,
+        </div >,
         document.body
     );
 }

@@ -5,6 +5,7 @@ import rehypeRaw from 'rehype-raw'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Check, Copy, Code2 } from 'lucide-react'
+import { useThemeStore } from '@/store/themeStore'
 
 // --- Copy Button for Code Blocks ---
 const CopyButton = ({ text }: { text: string }) => {
@@ -45,6 +46,9 @@ interface MarkdownRendererProps {
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className = '' }) => {
+    const { theme } = useThemeStore()
+    const isHappy = theme === 'happy'
+
     return (
         <div className={`markdown-body ${className}`}>
             <ReactMarkdown
@@ -60,8 +64,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                         if (isInline) {
                             return (
                                 <code
-                                    className="px-1.5 py-0.5 bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400
-                                        text-[13px] font-mono rounded-md border border-sky-100 dark:border-sky-500/20"
+                                    className={`px-1.5 py-0.5 text-[13px] font-mono rounded-md border
+                                        ${isHappy ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-100 dark:border-sky-500/20'}
+                                    `}
                                     {...props}
                                 >
                                     {children}
@@ -72,7 +77,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                         const language = match ? match[1] : 'text'
 
                         return (
-                            <div className="my-4 rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-sm group/code">
+                            <div className={`my-4 rounded-xl overflow-hidden border shadow-sm group/code
+                                ${isHappy ? 'border-orange-100' : 'border-slate-200 dark:border-white/10'}
+                            `}>
                                 {/* Header Bar */}
                                 <div className="flex items-center justify-between px-4 py-2 bg-[#282c34] border-b border-white/5">
                                     <div className="flex items-center gap-2">
@@ -113,7 +120,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                     // --- Tables ---
                     table({ children }) {
                         return (
-                            <div className="my-4 overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 shadow-sm">
+                            <div className={`my-4 overflow-x-auto rounded-xl border shadow-sm
+                                ${isHappy ? 'border-orange-100' : 'border-slate-200 dark:border-white/10'}
+                            `}>
                                 <table className="w-full text-sm border-collapse">
                                     {children}
                                 </table>
@@ -122,28 +131,36 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                     },
                     thead({ children }) {
                         return (
-                            <thead className="bg-slate-50 dark:bg-white/5 text-left">
+                            <thead className={`text-left
+                                ${isHappy ? 'bg-orange-50/50' : 'bg-slate-50 dark:bg-white/5'}
+                            `}>
                                 {children}
                             </thead>
                         )
                     },
                     th({ children }) {
                         return (
-                            <th className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider border-b border-slate-200 dark:border-white/10">
+                            <th className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b
+                                ${isHappy ? 'text-stone-600 border-orange-100' : 'text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10'}
+                            `}>
                                 {children}
                             </th>
                         )
                     },
                     td({ children }) {
                         return (
-                            <td className="px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-white/5">
+                            <td className={`px-4 py-2.5 text-sm border-b
+                                ${isHappy ? 'text-stone-700 border-orange-50' : 'text-slate-700 dark:text-slate-300 border-slate-100 dark:border-white/5'}
+                            `}>
                                 {children}
                             </td>
                         )
                     },
                     tr({ children }) {
                         return (
-                            <tr className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                            <tr className={`transition-colors
+                                ${isHappy ? 'hover:bg-orange-50/50' : 'hover:bg-slate-50 dark:hover:bg-white/[0.02]'}
+                            `}>
                                 {children}
                             </tr>
                         )
@@ -151,21 +168,23 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
 
                     // --- Headings ---
                     h1({ children }) {
-                        return <h1 className="text-xl font-bold text-slate-900 dark:text-white mt-6 mb-3 pb-2 border-b border-slate-200 dark:border-white/10">{children}</h1>
+                        return <h1 className={`text-xl font-bold mt-6 mb-3 pb-2 border-b
+                            ${isHappy ? 'text-stone-800 border-orange-100' : 'text-slate-900 dark:text-white border-slate-200 dark:border-white/10'}
+                        `}>{children}</h1>
                     },
                     h2({ children }) {
-                        return <h2 className="text-lg font-bold text-slate-900 dark:text-white mt-5 mb-2">{children}</h2>
+                        return <h2 className={`text-lg font-bold mt-5 mb-2 ${isHappy ? 'text-stone-800' : 'text-slate-900 dark:text-white'}`}>{children}</h2>
                     },
                     h3({ children }) {
-                        return <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 mt-4 mb-2">{children}</h3>
+                        return <h3 className={`text-base font-semibold mt-4 mb-2 ${isHappy ? 'text-stone-800' : 'text-slate-800 dark:text-slate-100'}`}>{children}</h3>
                     },
                     h4({ children }) {
-                        return <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-3 mb-1">{children}</h4>
+                        return <h4 className={`text-sm font-semibold mt-3 mb-1 ${isHappy ? 'text-stone-700' : 'text-slate-800 dark:text-slate-200'}`}>{children}</h4>
                     },
 
                     // --- Paragraphs ---
                     p({ children }) {
-                        return <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300 mb-3 last:mb-0">{children}</p>
+                        return <p className={`text-[15px] leading-7 mb-3 last:mb-0 ${isHappy ? 'text-stone-700' : 'text-slate-700 dark:text-slate-300'}`}>{children}</p>
                     },
 
                     // --- Lists ---
@@ -180,8 +199,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                         const ordered = parentTag === 'ol'
 
                         return (
-                            <li className="flex gap-2.5 text-[15px] leading-7 text-slate-700 dark:text-slate-300">
-                                <span className="mt-[2px] shrink-0 text-sky-500 dark:text-sky-400 font-bold">
+                            <li className={`flex gap-2.5 text-[15px] leading-7 ${isHappy ? 'text-stone-700' : 'text-slate-700 dark:text-slate-300'}`}>
+                                <span className={`mt-[2px] shrink-0 font-bold ${isHappy ? 'text-orange-500' : 'text-sky-500 dark:text-sky-400'}`}>
                                     {ordered ? '' : '•'}
                                 </span>
                                 <div className="flex-1 [&>p]:mb-1 [&>p:last-child]:mb-0">{children}</div>
@@ -192,7 +211,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                     // --- Blockquotes ---
                     blockquote({ children }) {
                         return (
-                            <blockquote className="my-4 pl-4 border-l-[3px] border-sky-400 dark:border-sky-500 bg-sky-50/50 dark:bg-sky-500/5 py-2 pr-4 rounded-r-lg italic text-slate-600 dark:text-slate-400 [&>p]:mb-0">
+                            <blockquote className={`my-4 pl-4 border-l-[3px] py-2 pr-4 rounded-r-lg italic [&>p]:mb-0
+                                ${isHappy ? 'border-orange-400 bg-orange-50/50 text-stone-600' : 'border-sky-400 dark:border-sky-500 bg-sky-50/50 dark:bg-sky-500/5 text-slate-600 dark:text-slate-400'}
+                            `}>
                                 {children}
                             </blockquote>
                         )
@@ -200,12 +221,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
 
                     // --- Strong / Bold ---
                     strong({ children }) {
-                        return <strong className="font-semibold text-slate-900 dark:text-white">{children}</strong>
+                        return <strong className={`font-semibold ${isHappy ? 'text-stone-900' : 'text-slate-900 dark:text-white'}`}>{children}</strong>
                     },
 
                     // --- Emphasis / Italic ---
                     em({ children }) {
-                        return <em className="italic text-slate-600 dark:text-slate-400">{children}</em>
+                        return <em className={`italic ${isHappy ? 'text-stone-600' : 'text-slate-600 dark:text-slate-400'}`}>{children}</em>
                     },
 
                     // --- Links ---
@@ -215,7 +236,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
                                 href={href}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-sky-600 dark:text-sky-400 hover:text-sky-500 underline underline-offset-2 decoration-sky-300 dark:decoration-sky-600 transition-colors"
+                                className={`underline underline-offset-2 transition-colors
+                                    ${isHappy ? 'text-orange-600 hover:text-orange-500 decoration-orange-300' : 'text-sky-600 dark:text-sky-400 hover:text-sky-500 decoration-sky-300 dark:decoration-sky-600'}
+                                `}
                             >
                                 {children}
                             </a>
@@ -224,13 +247,15 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
 
                     // --- Horizontal Rule ---
                     hr() {
-                        return <hr className="my-5 border-t border-slate-200 dark:border-white/10" />
+                        return <hr className={`my-5 border-t ${isHappy ? 'border-orange-100' : 'border-slate-200 dark:border-white/10'}`} />
                     },
 
                     // --- Images (e.g., chart artifacts) ---
                     img({ src, alt, ...props }) {
                         return (
-                            <div className="my-4 rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-sm">
+                            <div className={`my-4 rounded-xl overflow-hidden border shadow-sm
+                                ${isHappy ? 'border-orange-100' : 'border-slate-200 dark:border-white/10'}
+                            `}>
                                 <img
                                     src={src}
                                     alt={alt || 'Chart'}

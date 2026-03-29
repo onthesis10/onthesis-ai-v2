@@ -41,7 +41,7 @@ const StoryContent = ({ stats, isExport = false }: { stats: ProductivityStoryPro
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     const timeString = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-    // Mock "Elevation Data" for the graph
+    // Decorative graph height (SVG path is illustrative, not data-driven — real stats come from props)
     const graphHeight = isExport ? 400 : 150;
 
     return (

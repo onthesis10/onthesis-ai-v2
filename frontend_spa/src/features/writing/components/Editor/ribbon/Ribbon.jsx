@@ -1,36 +1,37 @@
 import { $createBibliographyNode } from '../nodes/BibliographyNode';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom'; 
-import { 
-    Bold, Italic, Underline, AlignLeft, AlignCenter, 
-    AlignRight, List, ListOrdered, Undo, Redo, 
+import { createPortal } from 'react-dom';
+import {
+    Bold, Italic, Underline, AlignLeft, AlignCenter,
+    AlignRight, List, ListOrdered, Undo, Redo,
     Type, Quote, Heading1, Heading2, AlignJustify,
     BookOpen, Quote as QuoteIcon, Library, Image as ImageIcon, Table,
     MessageSquarePlus, Search, Plus, X, ChevronDown, Check, PenTool,
-    Loader2, CheckCircle2, AlertCircle 
+    Loader2, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { useEditorBridge } from '../hooks/useEditorBridge';
 import { useProject } from '../../../context/ProjectContext';
 import { mergeRegister } from '@lexical/utils';
-import { 
-    $getSelection, $isRangeSelection, 
-    FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND, 
-    UNDO_COMMAND, REDO_COMMAND, 
+import {
+    $getSelection, $isRangeSelection,
+    FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND,
+    UNDO_COMMAND, REDO_COMMAND,
     SELECTION_CHANGE_COMMAND,
     CAN_UNDO_COMMAND, CAN_REDO_COMMAND,
     $createParagraphNode, $insertNodes, $createTextNode, $getRoot
 } from 'lexical';
 
-import { 
-    APPLY_BLOCK_TYPE_COMMAND, 
+import {
+    APPLY_BLOCK_TYPE_COMMAND,
     APPLY_LIST_TYPE_COMMAND,
     INSERT_CITATION_COMMAND,
     INSERT_IMAGE_COMMAND,
     INSERT_TABLE_COMMAND,
     ADD_REVIEW_COMMENT_COMMAND
 } from '../commands/customCommands';
+import { SET_LIST_TYPE_STYLE_COMMAND } from '../plugins/ListMaxPlugin';
 
-import ReferenceSearchModal from '../../ReferenceSearchModal'; 
+import ReferenceSearchModal from '../../ReferenceSearchModal';
 
 // ==========================================
 // 🧠 CITATION ENGINE
@@ -48,7 +49,7 @@ const getAuthors = (authorString) => {
     const rawList = authorString.split(/;|,/).map(a => a.trim()).filter(a => a);
     return rawList.map(name => {
         const parts = name.split(' ');
-        return parts.length > 1 ? parts[parts.length - 1] : name; 
+        return parts.length > 1 ? parts[parts.length - 1] : name;
     });
 };
 
@@ -59,8 +60,8 @@ const CitationEngine = {
         switch (style) {
             case 'MLA9': return authors.length > 2 ? `(${authors[0]} et al.)` : `(${authors.join(' and ')})`;
             case 'HARVARD': return `(${authors[0]} et al. ${year})`;
-            case 'IEEE': return `[1]`; 
-            case 'APA7': 
+            case 'IEEE': return `[1]`;
+            case 'APA7':
             default: return authors.length > 2 ? `(${authors[0]} et al., ${year})` : `(${authors.join(' & ')}, ${year})`;
         }
     },
@@ -92,14 +93,13 @@ const ToastNotification = ({ message, type, onClose }) => {
 
     return createPortal(
         <div className="fixed bottom-6 right-6 z-[10000] animate-in slide-in-from-bottom-5 fade-in duration-300">
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
-                type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
-                type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 
-                'bg-white border-gray-200 text-gray-800'
-            }`}>
-                {type === 'success' ? <CheckCircle2 size={18} className="text-emerald-500"/> : 
-                 type === 'error' ? <AlertCircle size={18} className="text-red-500"/> : 
-                 <Loader2 size={18} className="animate-spin text-blue-500"/>}
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+                    'bg-white border-gray-200 text-gray-800'
+                }`}>
+                {type === 'success' ? <CheckCircle2 size={18} className="text-emerald-500" /> :
+                    type === 'error' ? <AlertCircle size={18} className="text-red-500" /> :
+                        <Loader2 size={18} className="animate-spin text-blue-500" />}
                 <span className="text-sm font-medium">{message}</span>
             </div>
         </div>,
@@ -125,7 +125,7 @@ const FloatingMenu = ({ isOpen, onClose, triggerRef, children, width = "w-48" })
     return createPortal(
         <>
             <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-            <div 
+            <div
                 className={`fixed z-[9999] bg-white dark:bg-[#1C1E24] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-100 overflow-hidden ${width}`}
                 style={{ top: coords.top, left: coords.left }}
             >
@@ -136,32 +136,35 @@ const FloatingMenu = ({ isOpen, onClose, triggerRef, children, width = "w-48" })
     );
 };
 
-// --- UI COMPONENTS ---
+// --- UI COMPONENTS (macOS Style: compact, flat, precise) ---
 const RibbonTab = ({ label, isActive, onClick }) => (
-    <button onClick={onClick} className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-all border-b-2 outline-none ${isActive ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+    <button onClick={onClick} className={`px-3 py-1.5 text-[11px] font-medium transition-all rounded-md outline-none ${isActive ? 'bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
         {label}
     </button>
 );
 
+const RibbonGroupDivider = () => <div className="w-[1px] h-4 bg-gray-300 dark:bg-gray-700 mx-1.5" />;
+
 const RibbonGroup = ({ children }) => (
-    <div className="flex items-center gap-1 px-2 border-r border-gray-200 dark:border-white/10 last:border-0 h-full relative">{children}</div>
+    <div className="flex items-center gap-0.5">
+        {children}
+    </div>
 );
 
 const RibbonButton = React.forwardRef(({ icon: Icon, onClick, isActive, label, disabled, hasDropdown, isLoading }, ref) => (
     <button
         ref={ref} onClick={onClick} disabled={disabled || isLoading} title={label}
-        className={`p-1.5 rounded-md transition-all flex items-center justify-center gap-0.5 min-w-[28px] outline-none ${isActive ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 shadow-sm ring-1 ring-blue-500/20' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'} ${(disabled || isLoading) ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`p-1.5 rounded-md transition-colors flex items-center justify-center gap-1 min-w-[28px] outline-none ${isActive ? 'bg-gray-200 dark:bg-white/20 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-gray-100'} ${(disabled || isLoading) ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
-        {isLoading ? <Loader2 size={16} className="animate-spin text-blue-500"/> : <Icon size={16} strokeWidth={2} />}
-        {hasDropdown && <ChevronDown size={10} className="opacity-50 ml-0.5" />}
+        {isLoading ? <Loader2 size={16} className="animate-spin text-gray-500" /> : <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />}
+        {hasDropdown && <ChevronDown size={10} className="opacity-40 ml-0.5" />}
     </button>
 ));
 
 // --- MAIN RIBBON ---
 export default function Ribbon() {
     const { editor, dispatch } = useEditorBridge();
-    const { project, addReference } = useProject(); 
-    const [activeTab, setActiveTab] = useState('Home');
+    const { project, addReference } = useProject();
 
     // UI States
     const [isBold, setIsBold] = useState(false);
@@ -172,15 +175,18 @@ export default function Ribbon() {
     const [canRedo, setCanRedo] = useState(false);
 
     // Feature States
-    const [currentStyle, setCurrentStyle] = useState('APA7'); 
+    const [currentStyle, setCurrentStyle] = useState('APA7');
     const [showStyleMenu, setShowStyleMenu] = useState(false);
     const styleBtnRef = useRef(null);
 
-    const [showRefSearch, setShowRefSearch] = useState(false); 
+    const [showListMenu, setShowListMenu] = useState(false);
+    const listBtnRef = useRef(null);
+
+    const [showRefSearch, setShowRefSearch] = useState(false);
     const [showCitationPicker, setShowCitationPicker] = useState(false);
     const citationBtnRef = useRef(null);
     const [citationSearch, setCitationSearch] = useState('');
-    
+
     // Notification & Loading
     const [toast, setToast] = useState(null); // { message, type }
     const [isGeneratingBib, setIsGeneratingBib] = useState(false);
@@ -193,7 +199,7 @@ export default function Ribbon() {
                 setIsBold(selection.hasFormat('bold'));
                 setIsItalic(selection.hasFormat('italic'));
                 setIsUnderline(selection.hasFormat('underline'));
-                
+
                 const anchorNode = selection.anchor.getNode();
                 const element = anchorNode.getKey() === 'root' ? anchorNode : anchorNode.getTopLevelElementOrThrow();
                 const elementDOM = editor.getElementByKey(element.getKey());
@@ -227,6 +233,17 @@ export default function Ribbon() {
         setToast({ message: "Sitasi berhasil disisipkan", type: "success" });
     };
 
+    // --- LOGIC: LIST STYLE ---
+    const handleListStyle = (style) => {
+        if (blockType !== 'ol') {
+            dispatch(APPLY_LIST_TYPE_COMMAND, 'number');
+        }
+        setTimeout(() => {
+            dispatch(SET_LIST_TYPE_STYLE_COMMAND, style);
+        }, 50);
+        setShowListMenu(false);
+    };
+
 
     // --- LOGIC: GENERATE BIBLIOGRAPHY (FIXED & RAPI) ---
     const handleInsertBibliography = () => {
@@ -240,7 +257,7 @@ export default function Ribbon() {
         setTimeout(() => {
             editor.update(() => {
                 const selection = $getSelection();
-                
+
                 if ($isRangeSelection(selection)) {
                     // ARRAY NODE UNTUK BATCH INSERT (Mencegah Merging)
                     const nodesToInsert = [];
@@ -258,32 +275,32 @@ export default function Ribbon() {
                     nodesToInsert.push(pHeader);
 
                     // 3. Item Referensi (BibliographyNode)
-                    const sortedRefs = [...project.references].sort((a, b) => 
+                    const sortedRefs = [...project.references].sort((a, b) =>
                         (a.author || "").localeCompare(b.author || "")
                     );
 
                     sortedRefs.forEach(ref => {
                         // Gunakan CUSTOM NODE agar formatnya terkunci (Hanging Indent)
                         const pBib = $createBibliographyNode();
-                        
+
                         // Parse Text
                         const fullText = CitationEngine.formatBib(ref, currentStyle);
                         const titleStr = ref.title;
                         const parts = fullText.split(titleStr);
 
                         if (parts.length >= 2 && titleStr) {
-                             pBib.append($createTextNode(parts[0]));
-                             const titleNode = $createTextNode(titleStr);
-                             titleNode.setFormat('italic'); 
-                             pBib.append(titleNode);
-                             pBib.append($createTextNode(parts.slice(1).join(titleStr)));
+                            pBib.append($createTextNode(parts[0]));
+                            const titleNode = $createTextNode(titleStr);
+                            titleNode.setFormat('italic');
+                            pBib.append(titleNode);
+                            pBib.append($createTextNode(parts.slice(1).join(titleStr)));
                         } else {
-                             pBib.append($createTextNode(fullText));
+                            pBib.append($createTextNode(fullText));
                         }
-                        
+
                         nodesToInsert.push(pBib);
                     });
-                    
+
                     // 4. Spasi Penutup
                     const pFooter = $createParagraphNode();
                     nodesToInsert.push(pFooter);
@@ -298,7 +315,7 @@ export default function Ribbon() {
 
         }, 800);
     };
-    
+
     const filteredRefs = useMemo(() => {
         if (!project?.references) return [];
         if (!citationSearch) return project.references;
@@ -308,105 +325,131 @@ export default function Ribbon() {
     const activeStyleLabel = CITATION_STYLES.find(s => s.value === currentStyle)?.label;
 
     return (
-        <div className="flex flex-col w-full bg-white dark:bg-[#18181B] transition-colors duration-300 relative">
-            
-            {/* TABS */}
-            <div className="flex px-2 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">
-                <RibbonTab label="Home" isActive={activeTab === 'Home'} onClick={() => setActiveTab('Home')} />
-                <RibbonTab label="Insert" isActive={activeTab === 'Insert'} onClick={() => setActiveTab('Insert')} />
-                <RibbonTab label="References" isActive={activeTab === 'References'} onClick={() => setActiveTab('References')} />
-                <RibbonTab label="Review" isActive={activeTab === 'Review'} onClick={() => setActiveTab('Review')} />
-            </div>
+        <div className="flex flex-col w-full bg-[#f9f9fa] dark:bg-[#1E1E1E] transition-colors relative">
 
-            {/* TOOLBAR */}
-            <div className="h-14 flex items-center px-2 py-1 overflow-x-auto custom-scrollbar">
-                
-                {activeTab === 'Home' && (
-                    <>
-                        <RibbonGroup>
-                            <RibbonButton icon={Undo} label="Undo" disabled={!canUndo} onClick={() => dispatch(UNDO_COMMAND)} />
-                            <RibbonButton icon={Redo} label="Redo" disabled={!canRedo} onClick={() => dispatch(REDO_COMMAND)} />
-                        </RibbonGroup>
-                        <RibbonGroup>
-                            <RibbonButton icon={Type} label="Normal" isActive={blockType === 'paragraph'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'paragraph')} />
-                            <RibbonButton icon={Heading1} label="H1" isActive={blockType === 'h1'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'h1')} />
-                            <RibbonButton icon={Heading2} label="H2" isActive={blockType === 'h2'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'h2')} />
-                            <RibbonButton icon={Quote} label="Quote" isActive={blockType === 'quote'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'quote')} />
-                        </RibbonGroup>
-                        <RibbonGroup>
-                            <RibbonButton icon={Bold} label="Bold" isActive={isBold} onClick={() => dispatch(FORMAT_TEXT_COMMAND, 'bold')} />
-                            <RibbonButton icon={Italic} label="Italic" isActive={isItalic} onClick={() => dispatch(FORMAT_TEXT_COMMAND, 'italic')} />
-                            <RibbonButton icon={Underline} label="Underline" isActive={isUnderline} onClick={() => dispatch(FORMAT_TEXT_COMMAND, 'underline')} />
-                        </RibbonGroup>
-                        <RibbonGroup>
-                            <RibbonButton icon={AlignLeft} label="Left" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'left')} />
-                            <RibbonButton icon={AlignCenter} label="Center" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'center')} />
-                            <RibbonButton icon={AlignRight} label="Right" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'right')} />
-                            <RibbonButton icon={AlignJustify} label="Justify" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'justify')} />
-                            <RibbonButton icon={List} label="Bullet" isActive={blockType === 'ul'} onClick={() => dispatch(APPLY_LIST_TYPE_COMMAND, 'bullet')} />
-                            <RibbonButton icon={ListOrdered} label="Number" isActive={blockType === 'ol'} onClick={() => dispatch(APPLY_LIST_TYPE_COMMAND, 'number')} />
-                        </RibbonGroup>
-                    </>
-                )}
+            {/* TOOLBAR — Unified macOS Style (Compact, 48px) */}
+            <div className="h-12 flex items-center px-4 overflow-x-auto overflow-y-hidden custom-scrollbar bg-white/60 dark:bg-transparent border-b border-gray-200/50 dark:border-white/5 shadow-sm">
 
-                {activeTab === 'References' && (
-                    <>
-                        <RibbonGroup>
-                            <div className="relative">
-                                <button 
-                                    ref={styleBtnRef}
-                                    onClick={() => setShowStyleMenu(!showStyleMenu)}
-                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-700 dark:text-gray-300 hover:border-blue-500 transition-all mr-2"
-                                >
-                                    <PenTool size={12} className="text-blue-500"/>
-                                    {activeStyleLabel}
-                                    <ChevronDown size={10} className="opacity-50"/>
-                                </button>
-                            </div>
-                            <RibbonButton ref={citationBtnRef} icon={QuoteIcon} label="Insert Citation" isActive={showCitationPicker} hasDropdown onClick={() => setShowCitationPicker(!showCitationPicker)} />
-                            <RibbonButton icon={Library} label="Manage Sources" onClick={() => setShowRefSearch(true)} />
-                        </RibbonGroup>
-                        <RibbonGroup>
-                            <RibbonButton 
-                                icon={BookOpen} 
-                                label="Generate Bibliography" 
-                                isLoading={isGeneratingBib}
-                                onClick={handleInsertBibliography} 
-                            />
-                        </RibbonGroup>
-                    </>
-                )}
+                <div className="flex items-center gap-1">
+                    {/* Basic Actions */}
+                    <RibbonGroup>
+                        <RibbonButton icon={Undo} label="Undo" disabled={!canUndo} onClick={() => dispatch(UNDO_COMMAND)} />
+                        <RibbonButton icon={Redo} label="Redo" disabled={!canRedo} onClick={() => dispatch(REDO_COMMAND)} />
+                    </RibbonGroup>
+                    <RibbonGroupDivider />
 
-                {activeTab === 'Insert' && (
+                    {/* Styles & Headings */}
+                    <RibbonGroup>
+                        <RibbonButton icon={Type} label="Normal" isActive={blockType === 'paragraph'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'paragraph')} />
+                        <RibbonButton icon={Heading1} label="Heading 1" isActive={blockType === 'h1'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'h1')} />
+                        <RibbonButton icon={Heading2} label="Heading 2" isActive={blockType === 'h2'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'h2')} />
+                        <RibbonButton icon={Quote} label="Quote" isActive={blockType === 'quote'} onClick={() => dispatch(APPLY_BLOCK_TYPE_COMMAND, 'quote')} />
+                    </RibbonGroup>
+                    <RibbonGroupDivider />
+
+                    {/* Text Format */}
+                    <RibbonGroup>
+                        <RibbonButton icon={Bold} label="Bold" isActive={isBold} onClick={() => dispatch(FORMAT_TEXT_COMMAND, 'bold')} />
+                        <RibbonButton icon={Italic} label="Italic" isActive={isItalic} onClick={() => dispatch(FORMAT_TEXT_COMMAND, 'italic')} />
+                        <RibbonButton icon={Underline} label="Underline" isActive={isUnderline} onClick={() => dispatch(FORMAT_TEXT_COMMAND, 'underline')} />
+                    </RibbonGroup>
+                    <RibbonGroupDivider />
+
+                    {/* Alignment */}
+                    <RibbonGroup>
+                        <RibbonButton icon={AlignLeft} label="Align Left" isActive={blockType !== 'justify' && blockType !== 'center' && blockType !== 'right'} onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'left')} />
+                        <RibbonButton icon={AlignCenter} label="Align Center" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'center')} />
+                        <RibbonButton icon={AlignRight} label="Align Right" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'right')} />
+                        <RibbonButton icon={AlignJustify} label="Justify" onClick={() => dispatch(FORMAT_ELEMENT_COMMAND, 'justify')} />
+                    </RibbonGroup>
+                    <RibbonGroupDivider />
+
+                    {/* Lists */}
+                    <RibbonGroup>
+                        <RibbonButton icon={List} label="Bullet List" isActive={blockType === 'ul'} onClick={() => dispatch(APPLY_LIST_TYPE_COMMAND, 'bullet')} />
+                        <div className="relative flex items-center">
+                            <RibbonButton ref={listBtnRef} icon={ListOrdered} label="Numbered List" isActive={blockType === 'ol'} hasDropdown onClick={() => setShowListMenu(!showListMenu)} />
+                        </div>
+                    </RibbonGroup>
+                    <RibbonGroupDivider />
+
+                    {/* Citations & References */}
+                    <RibbonGroup>
+                        <div className="relative flex items-center">
+                            <button
+                                ref={styleBtnRef}
+                                onClick={() => setShowStyleMenu(!showStyleMenu)}
+                                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-[11px] font-medium text-gray-700 dark:text-gray-300 hover:border-gray-300 transition-all shadow-sm whitespace-nowrap"
+                            >
+                                <PenTool size={12} className="text-gray-500" />
+                                <span>{activeStyleLabel}</span>
+                                <ChevronDown size={10} className="opacity-50" />
+                            </button>
+                        </div>
+                    </RibbonGroup>
+                    <RibbonGroup>
+                        <RibbonButton ref={citationBtnRef} icon={QuoteIcon} label="Insert Citation" isActive={showCitationPicker} hasDropdown onClick={() => setShowCitationPicker(!showCitationPicker)} />
+                        <RibbonButton icon={Library} label="Manage Sources" onClick={() => setShowRefSearch(true)} />
+                        <RibbonButton
+                            icon={BookOpen}
+                            label="Generate Bibliography"
+                            isLoading={isGeneratingBib}
+                            onClick={handleInsertBibliography}
+                        />
+                    </RibbonGroup>
+                    <RibbonGroupDivider />
+
+                    {/* Objects & Comments */}
                     <RibbonGroup>
                         <RibbonButton icon={ImageIcon} label="Insert Image" onClick={() => document.getElementById('img-upload-hidden').click()} />
                         <RibbonButton icon={Table} label="Insert Table" onClick={() => dispatch(INSERT_TABLE_COMMAND)} />
                         <input id="img-upload-hidden" type="file" className="hidden" accept="image/*" onChange={(e) => {
-                             const file = e.target.files[0];
-                             if(file) {
-                                 const reader = new FileReader();
-                                 reader.onload = (ev) => dispatch(INSERT_IMAGE_COMMAND, { src: ev.target.result, altText: file.name });
-                                 reader.readAsDataURL(file);
-                             }
-                        }}/>
+                            const file = e.target.files[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => dispatch(INSERT_IMAGE_COMMAND, { src: ev.target.result, altText: file.name });
+                                reader.readAsDataURL(file);
+                            }
+                        }} />
                     </RibbonGroup>
-                )}
-                {activeTab === 'Review' && (
+                    <RibbonGroupDivider />
                     <RibbonGroup>
                         <RibbonButton icon={MessageSquarePlus} label="New Comment" onClick={() => dispatch(ADD_REVIEW_COMMENT_COMMAND)} />
                     </RibbonGroup>
-                )}
+                </div>
             </div>
 
             {/* --- POPUPS --- */}
-            
+
             {/* Style Selector */}
             <FloatingMenu isOpen={showStyleMenu} onClose={() => setShowStyleMenu(false)} triggerRef={styleBtnRef} width="w-40">
                 <div className="p-1">
                     {CITATION_STYLES.map(style => (
                         <button key={style.value} onClick={() => { setCurrentStyle(style.value); setShowStyleMenu(false); }} className={`w-full text-left px-3 py-2 text-[10px] font-medium rounded-md flex items-center justify-between transition-colors ${currentStyle === style.value ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5'}`}>
                             {style.label}
-                            {currentStyle === style.value && <Check size={12}/>}
+                            {currentStyle === style.value && <Check size={12} />}
+                        </button>
+                    ))}
+                </div>
+            </FloatingMenu>
+
+            {/* List Type Selector */}
+            <FloatingMenu isOpen={showListMenu} onClose={() => setShowListMenu(false)} triggerRef={listBtnRef} width="w-48">
+                <div className="p-1">
+                    <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Format Penomoran</div>
+                    {[
+                        { value: 'decimal', label: '1, 2, 3 (Angka)' },
+                        { value: 'lower-alpha', label: 'a, b, c (Huruf Kecil)' },
+                        { value: 'upper-alpha', label: 'A, B, C (Huruf Besar)' },
+                        { value: 'lower-roman', label: 'i, ii, iii (Romawi Kecil)' },
+                        { value: 'upper-roman', label: 'I, II, III (Romawi Besar)' },
+                    ].map(opt => (
+                        <button
+                            key={opt.value}
+                            onClick={() => handleListStyle(opt.value)}
+                            className="w-full text-left px-3 py-2 text-[11px] font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 rounded-md flex items-center justify-between transition-colors"
+                        >
+                            {opt.label}
                         </button>
                     ))}
                 </div>
@@ -416,7 +459,7 @@ export default function Ribbon() {
             <FloatingMenu isOpen={showCitationPicker} onClose={() => setShowCitationPicker(false)} triggerRef={citationBtnRef} width="w-80">
                 <div className="p-2 border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#252525]">
                     <div className="relative">
-                        <Search size={14} className="absolute left-2.5 top-2 text-gray-400"/>
+                        <Search size={14} className="absolute left-2.5 top-2 text-gray-400" />
                         <input autoFocus type="text" placeholder="Cari referensi..." className="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-md pl-8 pr-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none text-gray-700 dark:text-gray-200" value={citationSearch} onChange={(e) => setCitationSearch(e.target.value)} />
                     </div>
                 </div>
@@ -429,14 +472,14 @@ export default function Ribbon() {
                     )) : (
                         <div className="p-4 text-center">
                             <p className="text-[10px] text-gray-400">Tidak ada referensi.</p>
-                            <button onClick={() => { setShowCitationPicker(false); setShowRefSearch(true); }} className="mt-2 text-[10px] text-blue-500 hover:underline flex items-center justify-center gap-1 w-full"><Plus size={10}/> Tambah Baru</button>
+                            <button onClick={() => { setShowCitationPicker(false); setShowRefSearch(true); }} className="mt-2 text-[10px] text-blue-500 hover:underline flex items-center justify-center gap-1 w-full"><Plus size={10} /> Tambah Baru</button>
                         </div>
                     )}
                 </div>
             </FloatingMenu>
 
             <ReferenceSearchModal isOpen={showRefSearch} onClose={() => setShowRefSearch(false)} projectId={project?.id} onReferenceAdded={(newRef) => addReference(newRef)} />
-            
+
             {/* NOTIFICATION TOAST */}
             {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>

@@ -5,7 +5,6 @@ import traceback
 import re
 from typing import Dict, Any, List, Optional, Union
 
-from app import firestore_db
 from app.utils import stats_utils, general_utils
 from app.utils.data_engine import OnThesisDataset
 
@@ -131,6 +130,7 @@ class AnalysisService:
                 dataset.add_analysis_log(analysis_type, result, params)
             
             # 6. Log Aktivitas User
+            from app import firestore_db
             general_utils.log_user_activity(
                 firestore_db, 
                 user.id, 

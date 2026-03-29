@@ -1,36 +1,38 @@
-// FILE: src/components/Assistant/generators/Chapter1/index.jsx
-
 import React, { useState, useEffect } from 'react';
-import { 
-    Zap, AlertTriangle, GitMerge, Lightbulb, 
+import {
+    Zap, AlertTriangle, GitMerge, Lightbulb,
     Sparkles, RefreshCw, ArrowRight, HelpCircle, Target,
-    Trash2, ChevronDown, ChevronRight, Save, Wand2
+    Trash2, ChevronDown, Save, Wand2
 } from 'lucide-react';
 import useStreamGenerator from '../../../../hooks/useStreamGenerator';
-import { useTheme } from '../../../../context/ThemeContext'; 
+import RuleViolationBanner from '../RuleViolationBanner';
+import CitationValidatorBar from '../CitationValidatorBar';
+import { useThemeStore } from '@/store/themeStore';
+import { cn } from '@/lib/utils';
+import { useToast } from '../../../UI/ToastProvider.jsx';
 
-// --- STATIC CONFIG (Tetap Sama) ---
+// --- STATIC CONFIG ---
 const SECTION_CONFIG = {
-    ideal: { 
-        title: "Kondisi Ideal", 
+    ideal: {
+        title: "Kondisi Ideal",
         subtitle: "Das Sollen (Teori/Harapan)",
         icon: Zap, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20",
         placeholder: "Contoh: Menurut UU No. X, pelayanan publik harus transparan..."
     },
-    factual: { 
-        title: "Kondisi Faktual", 
+    factual: {
+        title: "Kondisi Faktual",
         subtitle: "Das Sein (Fakta Lapangan)",
         icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10", border: "border-red-500/20",
         placeholder: "Contoh: Namun data menunjukkan 40% laporan tidak ditindaklanjuti..."
     },
-    gap: { 
-        title: "Research Gap", 
+    gap: {
+        title: "Research Gap",
         subtitle: "Novelty/Kebaruan",
         icon: GitMerge, color: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/20",
         placeholder: "Contoh: Penelitian sebelumnya hanya fokus di Jawa, belum ada yang meneliti di..."
     },
-    solution: { 
-        title: "Urgensi & Solusi", 
+    solution: {
+        title: "Urgensi & Solusi",
         subtitle: "Justifikasi Judul",
         icon: Lightbulb, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20",
         placeholder: "Contoh: Oleh karena itu, penerapan AI diperlukan untuk..."
@@ -50,8 +52,64 @@ const SECTION_CONFIG = {
 };
 
 const Chapter1Generator = ({ context, onInsert }) => {
-    const { theme } = useTheme(); 
-    
+    const { theme } = useThemeStore();
+    const { addToast } = useToast();
+
+    // --- Theme Config ---
+    const activeConfig = {
+        light: {
+            containerBg: "bg-white/80 text-slate-800 border-black/5 backdrop-blur-xl",
+            headerBg: "bg-white/50 border-black/5 backdrop-blur-xl",
+            subHeaderBg: "bg-black/5 border-black/5",
+            cardBg: "bg-white border-black/5 shadow-sm",
+            cardHover: "hover:bg-slate-50",
+            cardExpandedBg: "bg-slate-50",
+            textMain: "text-slate-800",
+            textMuted: "text-slate-500",
+            inputBg: "bg-white border-black/10 focus:ring-blue-500/20 text-slate-800 placeholder:text-slate-400",
+            btnPrimary: "bg-[#007AFF] text-white shadow-md hover:opacity-90",
+            btnDanger: "text-slate-400 hover:text-red-500 hover:bg-red-50",
+            outputBg: "bg-white border-black/10 shadow-sm",
+            outputHeader: "bg-slate-50 border-black/5",
+            iconBg: "bg-sky-100 text-sky-600",
+            statusBadge: "bg-white border-black/5 text-slate-500"
+        },
+        dark: {
+            containerBg: "bg-[#1E293B]/80 text-slate-200 border-white/5 backdrop-blur-xl",
+            headerBg: "bg-[#1E293B]/50 border-white/10 backdrop-blur-xl",
+            subHeaderBg: "bg-black/20 border-white/5",
+            cardBg: "bg-[#0B1120]/50 border-transparent",
+            cardHover: "hover:bg-white/5",
+            cardExpandedBg: "bg-black/20",
+            textMain: "text-slate-200",
+            textMuted: "text-slate-400",
+            inputBg: "bg-[#0B1120] border-white/10 focus:ring-cyan-500/20 text-slate-200 placeholder:text-slate-500",
+            btnPrimary: "bg-[#0EA5E9] text-white shadow-[0_0_15px_-3px_rgba(14,165,233,0.5)] hover:opacity-90",
+            btnDanger: "text-slate-500 hover:text-red-400 hover:bg-red-500/10",
+            outputBg: "bg-[#0B1120] border-white/10",
+            outputHeader: "bg-[#1E293B] border-white/5",
+            iconBg: "bg-sky-500/10 text-sky-400",
+            statusBadge: "bg-black/20 border-white/5 text-slate-400"
+        },
+        happy: {
+            containerBg: "bg-white/80 text-stone-800 border-orange-100 backdrop-blur-xl",
+            headerBg: "bg-white/90 border-orange-100 backdrop-blur-xl",
+            subHeaderBg: "bg-orange-50/50 border-orange-100",
+            cardBg: "bg-white border-orange-50 shadow-sm",
+            cardHover: "hover:bg-orange-50/50",
+            cardExpandedBg: "bg-orange-50/30",
+            textMain: "text-stone-800",
+            textMuted: "text-stone-500",
+            inputBg: "bg-white border-orange-200 focus:ring-orange-500/20 text-stone-800 placeholder:text-stone-400",
+            btnPrimary: "bg-gradient-to-r from-orange-400 to-rose-400 text-white shadow-lg shadow-orange-500/20 hover:opacity-90",
+            btnDanger: "text-stone-400 hover:text-red-500 hover:bg-red-50",
+            outputBg: "bg-white border-orange-100 shadow-sm",
+            outputHeader: "bg-orange-50/80 border-orange-100",
+            iconBg: "bg-orange-100 text-orange-500",
+            statusBadge: "bg-white border-orange-100 text-stone-500"
+        }
+    }[theme || 'dark'];
+
     // 1. INIT STATE
     const [sections, setSections] = useState(() => {
         const initial = {};
@@ -66,12 +124,12 @@ const Chapter1Generator = ({ context, onInsert }) => {
         ideal: true, factual: true, gap: true, solution: true, rumusan: false, tujuan: false
     });
 
-    const { generatedContent, isGenerating, generateStream, stopGeneration } = useStreamGenerator();
+    const { generatedContent, isGenerating, generateStream, stopGeneration, triggerSnapshot } = useStreamGenerator();
 
     // --- AUTO-LOAD ---
     useEffect(() => {
         if (!context?.id) return;
-        const storageKey = `onthesis_draft_bab1_${context.id}`;
+        const storageKey = `onthesis_draft_bab1_${context.id} `;
         const savedData = localStorage.getItem(storageKey);
         if (savedData) {
             try {
@@ -105,7 +163,7 @@ const Chapter1Generator = ({ context, onInsert }) => {
                 output: sections[key].output
             };
         });
-        const storageKey = `onthesis_draft_bab1_${context.id}`;
+        const storageKey = `onthesis_draft_bab1_${context.id} `;
         localStorage.setItem(storageKey, JSON.stringify(dataToSave));
     }, [sections, context?.id]);
 
@@ -116,6 +174,10 @@ const Chapter1Generator = ({ context, onInsert }) => {
                 ...prev,
                 [activeGenSection]: { ...prev[activeGenSection], output: generatedContent }
             }));
+        }
+        // Trigger snapshot when generation completes
+        if (activeGenSection && !isGenerating && generatedContent) {
+            triggerSnapshot(context?.id, 'bab1', sections);
         }
     }, [generatedContent, isGenerating, activeGenSection]);
 
@@ -129,10 +191,10 @@ const Chapter1Generator = ({ context, onInsert }) => {
     };
 
     const handleResetSection = (key) => {
-        if(window.confirm("Hapus draft bagian ini?")) {
-            setSections(prev => ({ 
-                ...prev, 
-                [key]: { ...prev[key], input: "", output: "" } 
+        if (window.confirm("Hapus draft bagian ini?")) {
+            setSections(prev => ({
+                ...prev,
+                [key]: { ...prev[key], input: "", output: "" }
             }));
         }
     };
@@ -150,12 +212,13 @@ const Chapter1Generator = ({ context, onInsert }) => {
         else if (key === 'tujuan') taskType = 'bab1_tujuan';
 
         if (['ideal', 'factual', 'gap', 'solution'].includes(key) && !sections[key].input.trim()) {
-            alert(`Tulis poin singkat dulu untuk ${sections[key].title}.`);
+            addToast(`Tulis poin singkat dulu untuk ${sections[key].title}.`, 'error');
             return;
         }
 
         generateStream({
             task: taskType,
+            projectId: context.id,
             context_title: context.title,
             context_problem: context.problem_statement,
             input_text: sections[key].input,
@@ -168,28 +231,30 @@ const Chapter1Generator = ({ context, onInsert }) => {
     };
 
     return (
-        // CONTAINER: Gray Theme (VS Code Style)
-        <div className="flex flex-col h-full bg-white dark:bg-[#18181B] text-gray-800 dark:text-[#CCCCCC] font-sans text-[13px] border-l border-gray-200 dark:border-white/5 transition-colors duration-300">
-            
-            {/* HEADER: Clean & Flush */}
-            <div className="border-b border-gray-200 dark:border-white/5 px-4 py-3 bg-white dark:bg-[#18181B] flex items-center justify-between shrink-0 sticky top-0 z-10">
+        <div className={cn("flex flex-col h-full font-sans text-[13px] border-l transition-colors duration-300", activeConfig.containerBg)}>
+
+            {/* HEADER */}
+            <div className={cn("border-b px-4 py-3 flex items-center justify-between shrink-0 sticky top-0 z-10", activeConfig.headerBg)}>
                 <div className="flex items-center gap-2">
-                    <div className="p-1 rounded bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400">
-                        <Wand2 size={12} />
+                    <div className={cn("p-1.5 rounded-lg", activeConfig.iconBg)}>
+                        <Wand2 size={14} />
                     </div>
-                    <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-widest">
+                    <span className={cn("text-xs font-bold uppercase tracking-widest", activeConfig.textMain)}>
                         Bab 1 Builder
                     </span>
                 </div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gray-50 dark:bg-[#202023] border border-gray-200 dark:border-white/5 text-[9px] font-medium text-gray-400">
-                    <Save size={10} className="text-emerald-500"/> Auto-Saved
+                <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold", activeConfig.statusBadge)}>
+                    <Save size={12} className={theme === 'happy' ? "text-orange-500" : "text-emerald-500"} /> Auto-Saved
                 </div>
             </div>
 
+            {/* RULE VIOLATIONS */}
+            <RuleViolationBanner projectId={context?.id} chapter="bab1" />
+
             {/* SCROLLABLE LIST */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <div className="divide-y divide-gray-100 dark:divide-white/5">
-                    
+                <div className={cn("divide-y", theme === 'dark' ? "divide-white/5" : "divide-black/5")}>
+
                     {Object.entries(sections).map(([key, section]) => {
                         const isExpanded = expandedSections[key];
                         const hasOutput = !!section.output;
@@ -197,73 +262,77 @@ const Chapter1Generator = ({ context, onInsert }) => {
 
                         return (
                             <div key={key} className="group transition-all duration-300">
-                                
+
                                 {/* SECTION HEADER */}
-                                <div 
+                                <div
                                     onClick={() => toggleExpand(key)}
-                                    className={`px-4 py-3.5 cursor-pointer flex items-center justify-between transition-colors hover:bg-gray-50 dark:hover:bg-[#202023] ${
-                                        isExpanded ? 'bg-gray-50 dark:bg-[#202023]' : 'bg-white dark:bg-[#18181B]'
-                                    }`}
+                                    className={cn(
+                                        "px-4 py-3.5 cursor-pointer flex items-center justify-between transition-colors",
+                                        isExpanded ? activeConfig.cardExpandedBg : [activeConfig.cardBg, activeConfig.cardHover]
+                                    )}
                                 >
                                     <div className="flex items-center gap-3.5">
                                         {/* Colored Icon Box */}
-                                        <div className={`p-1.5 rounded-md ${section.bg} ${section.color} border ${section.border} shadow-sm`}>
-                                            <section.icon size={14} strokeWidth={2.5} />
+                                        <div className={`p - 1.5 rounded - lg ${section.bg} ${section.color} border ${section.border} shadow - sm`}>
+                                            <section.icon size={16} strokeWidth={2.5} />
                                         </div>
                                         <div>
-                                            <div className="text-[12px] font-bold text-gray-800 dark:text-gray-200 leading-none mb-1">
+                                            <div className={cn("text-[13px] font-bold leading-none mb-1", activeConfig.textMain)}>
                                                 {section.title}
                                             </div>
-                                            <div className="text-[10px] text-gray-500 dark:text-gray-400 font-medium opacity-80">
+                                            <div className={cn("text-[11px] font-medium opacity-80", activeConfig.textMuted)}>
                                                 {section.subtitle}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-sky-500' : ''}`}>
-                                        <ChevronDown size={14} />
+                                    <div className={cn("transition-transform duration-200", activeConfig.textMuted, isExpanded ? 'rotate-180 text-blue-500' : '')}>
+                                        <ChevronDown size={16} />
                                     </div>
                                 </div>
 
                                 {/* SECTION BODY (EXPANDABLE) */}
                                 {isExpanded && (
-                                    <div className="px-4 pb-5 pt-1 bg-gray-50 dark:bg-[#202023] animate-in slide-in-from-top-1">
-                                        
-                                        {/* INPUT AREA (Gray/VSCode Style) */}
+                                    <div className={cn("px-4 pb-5 pt-2 animate-in slide-in-from-top-1", activeConfig.cardExpandedBg)}>
+
+                                        {/* INPUT AREA */}
                                         <div className="relative group/input mt-1 shadow-sm">
                                             <textarea
-                                                className="w-full bg-white dark:bg-[#18181B] border border-gray-200 dark:border-white/10 rounded-md px-3 py-3 text-[12px] text-gray-700 dark:text-gray-300 placeholder:text-gray-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/20 outline-none resize-none min-h-[90px] pb-10 transition-all leading-relaxed custom-scrollbar font-normal"
+                                                className={cn(
+                                                    "w-full rounded-xl px-4 py-3 text-[13px] outline-none resize-none min-h-[90px] pb-12 transition-all leading-relaxed custom-scrollbar font-medium border focus:ring-2",
+                                                    activeConfig.inputBg
+                                                )}
                                                 placeholder={section.placeholder}
                                                 value={section.input}
                                                 onChange={(e) => handleInputChange(key, e.target.value)}
                                             />
-                                            
+
                                             {/* FLOATING ACTIONS */}
-                                            <div className="absolute bottom-2 right-2 flex gap-1.5 opacity-90 hover:opacity-100 transition-opacity">
+                                            <div className="absolute bottom-2.5 right-2.5 flex gap-2 opacity-90 hover:opacity-100 transition-opacity">
                                                 {/* Clear Draft */}
                                                 {(section.input || section.output) && !isWriting && (
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); handleResetSection(key); }}
-                                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-md transition-all"
+                                                        className={cn("p-1.5 rounded-lg transition-all", activeConfig.btnDanger)}
                                                         title="Hapus Draft"
                                                     >
-                                                        <Trash2 size={12} />
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 )}
 
-                                                {/* Generate Button (Ocean Blue Accent) */}
+                                                {/* Generate Button */}
                                                 {isWriting ? (
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); stopGeneration(); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1 bg-red-50 dark:bg-red-900/10 text-red-500 border border-red-200 dark:border-red-900/30 rounded-md text-[10px] font-bold hover:bg-red-100 dark:hover:bg-red-900/20 transition-all cursor-pointer"
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-all cursor-pointer"
                                                     >
-                                                        <RefreshCw size={10} className="animate-spin"/> Stop
+                                                        <RefreshCw size={12} className="animate-spin" /> Stop
                                                     </button>
                                                 ) : (
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); handleGenerateSection(key); }}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-md text-[10px] font-bold transition-all shadow-sm active:scale-95 border border-sky-500"
+                                                        className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all border-transparent active:scale-95", activeConfig.btnPrimary)}
                                                     >
-                                                        <Sparkles size={11} fill="currentColor"/>
+                                                        <Sparkles size={12} fill="currentColor" />
                                                         {section.output ? 'Re-Write' : 'Generate'}
                                                     </button>
                                                 )}
@@ -272,34 +341,39 @@ const Chapter1Generator = ({ context, onInsert }) => {
 
                                         {/* OUTPUT PREVIEW */}
                                         {(hasOutput || isWriting) && (
-                                            <div className="mt-4 border border-gray-200 dark:border-white/10 rounded-md overflow-hidden bg-white dark:bg-[#18181B] shadow-sm">
+                                            <div className={cn("mt-4 rounded-xl overflow-hidden border", activeConfig.outputBg)}>
                                                 {/* Output Header */}
-                                                <div className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-[#252526] border-b border-gray-200 dark:border-white/5">
-                                                    <span className="text-[9px] font-bold text-gray-500 uppercase flex items-center gap-1.5 tracking-wider">
-                                                        <div className={`w-1.5 h-1.5 rounded-full ${isWriting ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`}></div>
+                                                <div className={cn("flex items-center justify-between px-4 py-2.5 border-b", activeConfig.outputHeader)}>
+                                                    <span className={cn("text-[10px] font-bold uppercase flex items-center gap-2 tracking-widest", activeConfig.textMuted)}>
+                                                        <div className={`w - 2 h - 2 rounded - full ${isWriting ? (theme === 'happy' ? 'bg-orange-400 animate-pulse' : 'bg-cyan-400 animate-pulse') : (theme === 'happy' ? 'bg-orange-500' : 'bg-emerald-500')} `}></div>
                                                         AI Generated Draft
                                                     </span>
-                                                    
+
                                                     {!isWriting && (
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleInsertPart(key)}
-                                                            className="flex items-center gap-1 text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors"
+                                                            className={cn("flex items-center gap-1.5 text-[11px] font-bold transition-colors", theme === 'happy' ? 'text-orange-500 hover:text-orange-600' : 'text-emerald-500 hover:text-emerald-400')}
                                                         >
-                                                            Insert <ArrowRight size={12}/>
+                                                            Insert <ArrowRight size={14} />
                                                         </button>
                                                     )}
                                                 </div>
 
                                                 {/* Text Content */}
-                                                <div className="p-4 max-h-[250px] overflow-y-auto custom-scrollbar">
-                                                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                                                        <div 
-                                                            className="text-[12px] leading-[1.7] text-gray-600 dark:text-gray-300 font-normal whitespace-pre-wrap font-sans"
-                                                            dangerouslySetInnerHTML={{ __html: section.output }} 
+                                                <div className="p-5 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                    <div className={cn("prose prose-sm max-w-none", theme === 'dark' ? "prose-invert" : "prose-slate")}>
+                                                        <div
+                                                            className={cn("text-[13px] leading-relaxed font-medium whitespace-pre-wrap font-sans", activeConfig.textMain)}
+                                                            dangerouslySetInnerHTML={{ __html: section.output }}
                                                         />
-                                                        {isWriting && <span className="inline-block w-1.5 h-3 bg-sky-500 ml-1 animate-pulse align-middle rounded-sm"/>}
+                                                        {isWriting && <span className={cn("inline-block w-2 h-4 ml-1 animate-pulse align-middle rounded-sm", theme === 'happy' ? 'bg-orange-400' : 'bg-cyan-500')} />}
                                                     </div>
                                                 </div>
+
+                                                {/* Citation Validator */}
+                                                {hasOutput && !isWriting && (
+                                                    <CitationValidatorBar projectId={context?.id} generatedText={section.output} />
+                                                )}
                                             </div>
                                         )}
 
@@ -309,9 +383,9 @@ const Chapter1Generator = ({ context, onInsert }) => {
                         );
                     })}
                 </div>
-                
+
                 {/* Spacer Bottom */}
-                <div className="h-16"></div>
+                <div className="h-20"></div>
             </div>
         </div>
     );

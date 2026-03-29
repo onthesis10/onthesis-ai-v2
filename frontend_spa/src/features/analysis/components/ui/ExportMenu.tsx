@@ -9,7 +9,7 @@ interface ExportMenuProps {
 }
 
 export function ExportMenu({ onExport, isExporting }: ExportMenuProps) {
-    const { userTier } = useAnalysisStore();
+    const userTier = useAnalysisStore(s => s.userTier);;
     const [isOpen, setIsOpen] = useState(false);
     const [exportStep, setExportStep] = useState("Preparing...");
 

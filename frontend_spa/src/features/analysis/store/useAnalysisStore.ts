@@ -85,9 +85,6 @@ interface AnalysisState {
     analysisError: string | null
     setAnalysisError: (error: string | null) => void
 
-    theme: 'light' | 'dark' | 'happy' | 'system'
-    setTheme: (theme: 'light' | 'dark' | 'happy' | 'system') => void
-
     aiMode: 'analyst' | 'visualization' | 'writing' | 'defense'
     setAiMode: (mode: 'analyst' | 'visualization' | 'writing' | 'defense') => void
 
@@ -296,18 +293,6 @@ export const useAnalysisStore = create<AnalysisState>()(
             analysisError: null,
             setAnalysisError: (error) => set({ analysisError: error }),
 
-            theme: (typeof window !== 'undefined' ? (localStorage.getItem('theme') as 'light' | 'dark' | 'happy' | 'system') || 'light' : 'light'),
-            setTheme: (theme) => {
-                localStorage.setItem('theme', theme)
-                set({ theme })
-
-                const root = window.document.documentElement
-                root.classList.remove('dark', 'happy')
-                if (theme === 'dark') root.classList.add('dark')
-                if (theme === 'happy') root.classList.add('happy')
-                // Removed system auto-detection to ensure Light Mode is primary
-            },
-
             aiMode: (typeof window !== 'undefined' ? (localStorage.getItem('onthesis_ai_mode') as any) || 'analyst' : 'analyst'),
             setAiMode: (mode) => {
                 localStorage.setItem('onthesis_ai_mode', mode)
@@ -418,11 +403,30 @@ export const useAnalysisStore = create<AnalysisState>()(
                 try {
                     const q = query(
                         collection(db, 'history'),
-                        where('userId', '==', user.uid),
-                        orderBy('createdAt', 'desc')
+                        where('userId', '==', user.uid)
+                        // Removed orderBy to avoid requiring Firebase composite index
                     )
                     const snapshot = await getDocs(q)
-                    const history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                    let history = snapshot.docs.map(doc => {
+                        const data = doc.data()
+                        if (data.payload_json) {
+                            try {
+                                const parsed = JSON.parse(data.payload_json)
+                                return { id: doc.id, ...parsed, createdAt: data.createdAt }
+                            } catch (e) {
+                                return { id: doc.id, ...data }
+                            }
+                        }
+                        return { id: doc.id, ...data }
+                    })
+
+                    // Sort locally descending to avoid Firestore index requirement
+                    history.sort((a, b) => {
+                        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.timestamp || 0);
+                        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.timestamp || 0);
+                        return timeB - timeA;
+                    });
+
                     set({ analysisHistory: history })
                 } catch (e) {
                     console.error("Error fetching history:", e)
@@ -449,7 +453,9 @@ export const useAnalysisStore = create<AnalysisState>()(
                 try {
                     const historyEntry = {
                         userId: user.uid,
-                        ...entry,
+                        title: entry.title || 'Analysis History',
+                        timestamp: entry.timestamp || Date.now(),
+                        payload_json: JSON.stringify(entry), // Stringify to avoid nested array errors
                         createdAt: Timestamp.now()
                     }
                     await addDoc(collection(db, 'history'), historyEntry)
@@ -498,7 +504,6 @@ export const useAnalysisStore = create<AnalysisState>()(
                 fileName: state.fileName,
                 researchContext: state.researchContext,
                 userTier: state.userTier,
-                theme: state.theme,
                 aiMode: state.aiMode,
                 analysisHistory: state.analysisHistory, // Added to persist whitelist
             }),

@@ -4,11 +4,13 @@ import ParaphraseEditor from './components/ParaphraseEditor';
 import ParaphraseOutput from './components/ParaphraseOutput';
 import AcademicMetricsPanel from './components/AcademicMetricsPanel';
 import { useThemeStore } from '@/store/themeStore';
+import { calculateSimilarity, calculateReadability, determineTone, checkCitations } from './utils/metrics';
 
 export const ParaphrasePage: React.FC = () => {
     const { theme } = useThemeStore();
     const [inputText, setInputText] = useState('');
     const [outputText, setOutputText] = useState('');
+    const [selectedStyle, setSelectedStyle] = useState('academic');
     const [isProcessing, setIsProcessing] = useState(false);
     const [metrics, setMetrics] = useState({
         similarity: 0,
@@ -21,7 +23,10 @@ export const ParaphrasePage: React.FC = () => {
         const savedInput = localStorage.getItem('paraphrase_input');
         const savedOutput = localStorage.getItem('paraphrase_output');
         if (savedInput) setInputText(savedInput);
-        if (savedOutput) setOutputText(savedOutput);
+        if (savedOutput) {
+            setOutputText(savedOutput);
+            calculateMetrics(savedInput || '', savedOutput, 'academic');
+        }
     }, []);
 
     useEffect(() => {
@@ -52,7 +57,7 @@ export const ParaphrasePage: React.FC = () => {
             const response = await fetch('/api/paraphrase', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: inputText, style: 'academic' })
+                body: JSON.stringify({ text: inputText, style: selectedStyle })
             });
 
             if (!response.body) throw new Error("No response body");
@@ -67,25 +72,23 @@ export const ParaphrasePage: React.FC = () => {
                 result += chunk;
                 setOutputText(prev => prev + chunk);
             }
-            calculateMetrics(inputText, result);
+            calculateMetrics(inputText, result, selectedStyle);
         } catch (error) {
             console.error("Paraphrase failed:", error);
-            setTimeout(() => {
-                const mockResult = "The integration of digital devices into daily life has become pervasive. Many individuals perceive an inability to function effectively without them, checking notifications immediately upon waking and continuing until sleep.";
-                setOutputText(mockResult);
-                calculateMetrics(inputText, mockResult);
-            }, 1500);
+            setOutputText('');
+            // Show error notification instead of fake mock result
+            alert('Gagal memparafrase teks. Pastikan koneksi internet aktif dan coba lagi.');
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const calculateMetrics = (original: string, rewritten: string) => {
+    const calculateMetrics = (original: string, rewritten: string, style: string) => {
         setMetrics({
-            similarity: 12,
-            readabilityScore: 65,
-            tone: 'Objective',
-            'citation integrity': 'Verified'
+            similarity: calculateSimilarity(original, rewritten),
+            readabilityScore: calculateReadability(rewritten),
+            tone: determineTone(style),
+            'citation integrity': checkCitations(original, rewritten)
         });
     };
 
@@ -191,6 +194,8 @@ export const ParaphrasePage: React.FC = () => {
                             onChange={setInputText}
                             onParaphrase={handleParaphrase}
                             isProcessing={isProcessing}
+                            selectedStyle={selectedStyle}
+                            onStyleChange={setSelectedStyle}
                         />
                     </section>
 
