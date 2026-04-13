@@ -1,0 +1,26 @@
+[
+  {
+    "nama": "Test 1 - Rewrite",
+    "response": {
+      "response": "Berikut adalah kalimat yang telah disintesis dan dirinisikan:\n\nPertumbuhan pesat teknologi telah berdampak signifikan pada berbagai aspek kehidupan manusia.\n\n Langkah berikutnya: kamu bisa minta saya untuk menuangkan kalimat tersebut ke dalam konteks yang lebih luas, atau langsung memperbarui bab pendahuluan.",
+      "status": "success",
+      "user_id": "test123"
+    }
+  },
+  {
+    "nama": "Test 2 - Cari Paper",
+    "response": {
+      "response": "\nHm, saya belum yakin dengan apa yang kamu butuhkan sekarang.\n\nApakah kamu ingin saya:\nA) Mencari paper akademik tentang topik ini\nB) Membantu menulis atau memperbaiki teks\nC) Menganalisis argumen atau struktur tulisan kamu\n\nKetik A, B, atau C — atau jelaskan lebih spesifik apa yang kamu butuhkan.\n",
+      "status": "success",
+      "user_id": "test123"
+    }
+  },
+  {
+    "nama": "Test 3 - Literature Review",
+    "response": {
+      "response": "Terima kasih sudah meminta bantuan saya. Saya mendapatkan error saat mencoba memproduksi jawaban berdasarkan model Gemini yang tidak dapat diakses. Ini mungkin disebabkan oleh perubahan model Gemini yang tidak sinkron dengan API yang saya gunakan.\n\nLangkah berikutnya, saya akan mencoba menggunakan model lain untuk memproduksi jawaban Anda. Harap bersabar beberapa saat.\n\nSaya akan mencoba kembali dengan model lain. Jika masih tidak bisa, saya akan mencoba menggunakan kemampuan lain untuk membantu Anda.",
+      "status": "success",
+      "user_id": "test123"
+    }
+  }
+]

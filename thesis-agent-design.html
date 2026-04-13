@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ThesisStudio — Agentic Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+/* ─── TOKENS ─── */
+:root {
+  --bg:        #0C0E14;
+  --surface:   #111318;
+  --surface2:  #161920;
+  --surface3:  #1C2028;
+  --border:    rgba(255,255,255,0.065);
+  --border2:   rgba(255,255,255,0.04);
+
+  --txt:       #D4D8E2;
+  --txt2:      #6B7280;
+  --txt3:      #3A4050;
+
+  --blue:      #5B7CF6;
+  --blue-s:    rgba(91,124,246,0.12);
+  --blue-b:    rgba(91,124,246,0.28);
+  --green:     #22C55E;
+  --green-s:   rgba(34,197,94,0.1);
+  --green-b:   rgba(34,197,94,0.25);
+  --amber:     #F59E0B;
+  --amber-s:   rgba(245,158,11,0.1);
+  --red:       #EF4444;
+  --red-s:     rgba(239,68,68,0.1);
+  --red-b:     rgba(239,68,68,0.3);
+  --purple:    #A78BFA;
+  --cyan:      #22D3EE;
+
+  /* diff colors */
+  --diff-add:  rgba(34,197,94,0.08);
+  --diff-add-b: rgba(34,197,94,0.35);
+  --diff-del:  rgba(239,68,68,0.08);
+  --diff-del-b: rgba(239,68,68,0.3);
+  --diff-edit: rgba(91,124,246,0.08);
+  --diff-edit-b: rgba(91,124,246,0.3);
+
+  --paper:     #FFFFFF;
+  --paper-bg:  #F2F3F5;
+
+  --sans: 'Geist', system-ui, sans-serif;
+  --mono: 'Geist Mono', monospace;
+  --serif: 'Lora', Georgia, serif;
+  --r: 8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; font-family: var(--sans); background: var(--bg); color: var(--txt); font-size: 13px; -webkit-font-smoothing: antialiased; }
+button { font-family: var(--sans); cursor: pointer; border: none; }
+input, textarea { font-family: var(--sans); }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 10px; }
+
+/* ─── LAYOUT ─── */
+.app { display: grid; grid-template-columns: 200px 1fr 340px; grid-template-rows: 42px 1fr; height: 100vh; }
+
+/* ─── TOPBAR ─── */
+.topbar {
+  grid-column: 1/-1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 14px; gap: 10px;
+}
+.mac { display:flex; gap:6px; }
+.mac span { width:11px;height:11px;border-radius:50%;cursor:pointer; }
+.mac .r{background:#FF5F57}.mac .y{background:#FFBD2E}.mac .g{background:#28CA42}
+.tb-sep { width:1px;height:16px;background:var(--border);flex-shrink:0; }
+.tb-crumb { display:flex;align-items:center;gap:3px;font-size:11.5px;color:var(--txt2); }
+.tb-crumb span { padding:2px 7px;border-radius:4px;cursor:pointer;transition:.12s; }
+.tb-crumb span:hover { background:rgba(255,255,255,0.05);color:var(--txt); }
+.tb-crumb span.cur { color:var(--txt); }
+.tb-crumb .sep { opacity:.3; }
+.tb-r { margin-left:auto;display:flex;align-items:center;gap:6px; }
+.tb-btn { padding:4px 11px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--txt2);font-size:11px;font-weight:500;transition:.12s; }
+.tb-btn:hover { background:rgba(255,255,255,0.05);color:var(--txt); }
+.tb-btn.accent { background:var(--blue);border-color:transparent;color:#fff;box-shadow:0 0 14px rgba(91,124,246,.3); }
+.save-dot { width:6px;height:6px;border-radius:50%;background:var(--green);animation:sdot 2.2s ease infinite;flex-shrink:0; }
+@keyframes sdot{0%,100%{opacity:1}50%{opacity:.35}}
+.save-txt { font-family:var(--mono);font-size:10px;color:var(--txt3); }
+
+/* ─── LEFT SIDEBAR ─── */
+.left-bar {
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.lb-head { padding:12px 12px 8px;border-bottom:1px solid var(--border2); }
+.lb-proj { font-size:11.5px;font-weight:600;color:var(--txt);margin-bottom:6px;line-height:1.3; }
+.lb-prog { display:flex;align-items:center;gap:5px; }
+.lb-bar { flex:1;height:2px;background:rgba(255,255,255,0.06);border-radius:10px;overflow:hidden; }
+.lb-bar-f { height:100%;background:linear-gradient(90deg,var(--blue),var(--cyan));border-radius:10px; }
+.lb-pct { font-family:var(--mono);font-size:9.5px;color:var(--blue);font-weight:600; }
+
+.lb-scroll { flex:1;overflow-y:auto;padding:6px 0 20px; }
+.lb-sec { font-family:var(--mono);font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--txt3);padding:10px 12px 5px;font-weight:600; }
+
+.ch-item { margin:1px 6px;padding:7px 8px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:.12s; }
+.ch-item:hover { background:rgba(255,255,255,0.03); }
+.ch-item.act { background:var(--blue-s);border-color:var(--blue-b); }
+.ch-top { display:flex;align-items:center;justify-content:space-between;margin-bottom:4px; }
+.ch-name { font-size:11.5px;font-weight:500;color:var(--txt);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.ch-badge { font-family:var(--mono);font-size:8.5px;padding:1.5px 5px;border-radius:3px;font-weight:600;flex-shrink:0;margin-left:4px; }
+.bd-done{background:var(--green-s);color:var(--green)}.bd-act{background:var(--blue-s);color:#93ABFD}.bd-rev{background:var(--amber-s);color:var(--amber)}.bd-dft{background:rgba(255,255,255,0.04);color:var(--txt3)}
+.ch-bar { height:2px;background:rgba(255,255,255,0.04);border-radius:10px;overflow:hidden; }
+.ch-bar-f { height:100%;border-radius:10px; }
+.ch-warn { font-size:9.5px;color:var(--amber);margin-top:3px; }
+
+/* ─── CENTER EDITOR ─── */
+.editor-col {
+  background:var(--paper-bg);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  position:relative;
+}
+
+/* mini ribbon */
+.ribbon {
+  height:36px;background:rgba(255,255,255,0.95);
+  border-bottom:1px solid rgba(0,0,0,0.07);
+  display:flex;align-items:center;padding:0 10px;gap:2px;
+  flex-shrink:0;
+  backdrop-filter:blur(10px);
+}
+.rb { width:27px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:4px;background:transparent;color:#4B5563;font-size:12px;font-weight:600;transition:.1s; }
+.rb:hover{background:rgba(91,124,246,.1);color:var(--blue)}
+.rb-div{width:1px;height:16px;background:rgba(0,0,0,0.08);margin:0 4px}
+.rb-wide{width:auto;padding:0 8px;font-size:11px;}
+.apa-badge{display:flex;align-items:center;gap:4px;padding:0 8px;height:24px;border-radius:4px;background:rgba(91,124,246,.08);border:1px solid rgba(91,124,246,.2);font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--blue);}
+
+/* editor scroll */
+.ed-scroll { flex:1;overflow-y:auto;position:relative; }
+
+/* ─── PAPER ─── */
+.paper-wrap { max-width:720px;margin:28px auto 120px;position:relative; }
+
+.paper {
+  background:var(--paper);
+  border-radius:2px;
+  padding:64px 72px 80px;
+  box-shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.05),0 20px 48px rgba(0,0,0,.06);
+  position:relative;
+}
+.paper::before{content:'BAB 3  ·  METODOLOGI';position:absolute;top:24px;left:72px;font-family:var(--mono);font-size:9px;letter-spacing:1.8px;color:#C1C9D4;}
+.paper::after{content:'3';position:absolute;bottom:24px;right:72px;font-family:var(--mono);font-size:9px;color:#C1C9D4;}
+
+/* Para numbering gutter */
+.para-gutter {
+  position:absolute;left:-44px;top:0;width:38px;
+  pointer-events:none;
+}
+
+/* ── PARAGRAPH BLOCK — key concept ── */
+.para-block {
+  position:relative;
+  margin-bottom:0;
+  transition:background .15s;
+}
+
+/* para id label */
+.para-id {
+  position:absolute;
+  left:-44px;
+  top:50%;transform:translateY(-50%);
+  font-family:var(--mono);font-size:9px;
+  color:var(--txt3);
+  width:38px;text-align:right;
+  user-select:none;
+  transition:.12s;
+  opacity:0;
+}
+.para-block:hover .para-id { opacity:1;color:var(--txt2); }
+.para-block.focused .para-id { opacity:1;color:var(--blue); }
+
+/* para actions (on hover) */
+.para-actions {
+  position:absolute;
+  right:-52px;
+  top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:3px;
+  opacity:0;transition:.12s;
+}
+.para-block:hover .para-actions { opacity:1; }
+.pa-btn {
+  width:22px;height:22px;border-radius:4px;
+  background:rgba(255,255,255,0.9);
+  border:1px solid rgba(0,0,0,0.1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,.1);
+  transition:.1s;color:#374151;
+}
+.pa-btn:hover{background:var(--blue);color:#fff;border-color:transparent;}
+
+/* ── DIFF STATES ── */
+.para-block.diff-add {
+  background:var(--diff-add);
+  border-left:2.5px solid var(--green);
+  padding-left:10px;margin-left:-13px;
+  border-radius:0 4px 4px 0;
+}
+.para-block.diff-edit {
+  background:var(--diff-edit);
+  border-left:2.5px solid var(--blue);
+  padding-left:10px;margin-left:-13px;
+  border-radius:0 4px 4px 0;
+}
+.para-block.diff-del {
+  background:var(--diff-del);
+  border-left:2.5px solid var(--red);
+  padding-left:10px;margin-left:-13px;
+  border-radius:0 4px 4px 0;
+  opacity:.65;text-decoration:line-through;text-decoration-color:rgba(239,68,68,.4);
+}
+.para-block.diff-focus {
+  background:rgba(91,124,246,.04);
+  outline:1.5px solid rgba(91,124,246,.25);
+  outline-offset:2px;
+  border-radius:4px;
+}
+
+/* diff badge on para */
+.diff-tag {
+  display:inline-flex;align-items:center;gap:3px;
+  font-family:var(--mono);font-size:8.5px;font-weight:600;
+  padding:1.5px 6px;border-radius:3px;
+  vertical-align:middle;margin-left:6px;
+}
+.dt-add{background:var(--green-s);color:var(--green);border:1px solid var(--green-b);}
+.dt-edit{background:var(--blue-s);color:#93ABFD;border:1px solid var(--blue-b);}
+.dt-del{background:var(--red-s);color:var(--red);border:1px solid var(--red-b);}
+
+/* Accept/Reject bar — appears on diff blocks */
+.diff-bar {
+  display:flex;align-items:center;gap:6px;
+  margin-top:6px;
+  padding-top:6px;
+  border-top:1px solid rgba(0,0,0,.05);
+}
+.diff-accept {
+  display:flex;align-items:center;gap:4px;
+  padding:3px 10px;border-radius:5px;
+  background:var(--green-s);border:1px solid var(--green-b);
+  color:var(--green);font-size:10.5px;font-weight:600;cursor:pointer;
+  transition:.12s;
+}
+.diff-accept:hover{background:rgba(34,197,94,.2);}
+.diff-reject {
+  display:flex;align-items:center;gap:4px;
+  padding:3px 10px;border-radius:5px;
+  background:var(--red-s);border:1px solid var(--red-b);
+  color:var(--red);font-size:10.5px;font-weight:600;cursor:pointer;
+  transition:.12s;
+}
+.diff-reject:hover{background:rgba(239,68,68,.2);}
+.diff-bar-lbl{font-family:var(--mono);font-size:9.5px;color:#6B7280;margin-right:4px;}
+.diff-all{font-size:10.5px;color:#6B7280;margin-left:auto;cursor:pointer;text-decoration:underline;}
+
+/* editor typography */
+.ed-eyebrow{font-family:var(--mono);font-size:9.5px;letter-spacing:2px;text-transform:uppercase;color:#94A3B8;margin-bottom:10px;font-weight:500;}
+.ed-h1{font-family:var(--serif);font-size:26px;font-weight:500;color:#111827;line-height:1.25;margin-bottom:6px;letter-spacing:-.2px;}
+.ed-meta{font-family:var(--mono);font-size:9.5px;color:#C1C9D4;margin-bottom:36px;}
+.ed-h2{font-family:var(--serif);font-size:16.5px;font-weight:500;color:#1F2937;margin:32px 0 13px;padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,.06);letter-spacing:-.1px;}
+.ed-p{font-family:var(--serif);font-size:13.5px;line-height:2.0;color:#374151;margin-bottom:18px;position:relative;}
+.cite{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);font-size:9.5px;color:#3B82F6;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:2px;padding:0 4px;vertical-align:middle;cursor:pointer;transition:.1s;}
+.cite:hover{background:rgba(59,130,246,.15);}
+
+/* cursor blink */
+.caret{display:inline-block;width:2px;height:15px;background:var(--blue);border-radius:1px;animation:cb 1.1s ease infinite;vertical-align:middle;}
+@keyframes cb{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+/* ghost */
+.ghost{color:rgba(91,124,246,.38);font-style:italic;pointer-events:none;}
+
+/* status bar */
+.statusbar {
+  position:absolute;bottom:0;left:0;right:0;
+  height:26px;background:var(--surface);
+  border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 14px;gap:14px;
+  font-family:var(--mono);font-size:10px;
+  z-index:20;
+}
+.sb-l,.sb-r{display:flex;align-items:center;gap:12px;}
+.sb-r{margin-left:auto;}
+.si{color:var(--txt3);display:flex;align-items:center;gap:3px;}
+.si .v{color:var(--txt2);}
+.si.warn{color:var(--amber);}
+.voice-pill{display:flex;align-items:center;gap:4px;padding:1px 7px;border-radius:10px;background:var(--green-s);border:1px solid var(--green-b);cursor:pointer;}
+.vp-score{font-size:10px;font-weight:700;color:var(--green);}
+.vp-lbl{font-size:9px;color:rgba(34,197,94,.6);}
+
+/* accept-all banner */
+.accept-banner {
+  position:absolute;top:44px;left:0;right:0;
+  background:rgba(11,17,26,.95);
+  border-bottom:1px solid rgba(91,124,246,.2);
+  backdrop-filter:blur(16px);
+  display:flex;align-items:center;padding:0 16px;gap:10px;
+  height:38px;z-index:30;
+  animation:bannerIn .25s ease;
+}
+@keyframes bannerIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.banner-label{font-size:11.5px;color:#93ABFD;font-weight:500;flex:1;}
+.banner-count{font-family:var(--mono);font-size:10.5px;color:var(--blue);background:var(--blue-s);border:1px solid var(--blue-b);padding:1px 7px;border-radius:3px;}
+.banner-btn{display:flex;align-items:center;gap:5px;padding:4px 12px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:.12s;}
+.banner-accept{background:var(--green-s);border:1px solid var(--green-b);color:var(--green);}
+.banner-accept:hover{background:rgba(34,197,94,.2);}
+.banner-reject{background:var(--red-s);border:1px solid var(--red-b);color:var(--red);}
+.banner-reject:hover{background:rgba(239,68,68,.2);}
+.banner-close{width:26px;height:26px;background:transparent;border:none;color:var(--txt3);font-size:16px;cursor:pointer;border-radius:4px;transition:.1s;}
+.banner-close:hover{background:rgba(255,255,255,.06);color:var(--txt);}
+
+/* ─── AGENT PANEL ─── */
+.agent-panel {
+  background:var(--surface);
+  border-left:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+/* agent header */
+.ap-head {
+  padding:10px 12px 8px;
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.ap-title{font-size:13px;font-weight:600;color:var(--txt);}
+.ap-actions{display:flex;gap:4px;}
+.ap-ic{width:26px;height:26px;border-radius:5px;background:transparent;border:none;color:var(--txt3);font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.1s;}
+.ap-ic:hover{background:rgba(255,255,255,.06);color:var(--txt);}
+
+/* chat scroll */
+.chat-scroll{flex:1;overflow-y:auto;padding:12px 12px 8px;display:flex;flex-direction:column;gap:10px;}
+
+/* ── Message bubbles ── */
+.msg-user {
+  align-self:flex-end;max-width:85%;
+  background:var(--blue-s);border:1px solid var(--blue-b);
+  border-radius:10px 10px 2px 10px;
+  padding:9px 12px;font-size:12.5px;color:#C7D5FF;
+  line-height:1.55;
+}
+.msg-ai {
+  align-self:flex-start;max-width:100%;
+  color:var(--txt);font-size:12.5px;line-height:1.6;
+}
+
+/* ── Tool call cards ── */
+.tool-card {
+  border:1px solid var(--border);
+  border-radius:8px;overflow:hidden;
+  margin:4px 0;font-size:11.5px;
+}
+.tc-head {
+  display:flex;align-items:center;gap:7px;
+  padding:7px 10px;background:rgba(255,255,255,.03);
+  border-bottom:1px solid var(--border);cursor:pointer;
+  transition:.1s;user-select:none;
+}
+.tc-head:hover{background:rgba(255,255,255,.05);}
+.tc-icon{font-size:13px;flex-shrink:0;}
+.tc-name{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--txt);flex:1;}
+.tc-status{font-family:var(--mono);font-size:9.5px;font-weight:600;padding:2px 6px;border-radius:3px;}
+.tc-s-run{background:rgba(245,158,11,.1);color:var(--amber);animation:pulse .8s ease infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.tc-s-done{background:var(--green-s);color:var(--green);}
+.tc-s-pend{background:rgba(255,255,255,.04);color:var(--txt3);}
+.tc-chevron{color:var(--txt3);font-size:10px;transition:.2s;}
+.tc-head.open .tc-chevron{transform:rotate(90deg);}
+
+.tc-body{padding:8px 10px;display:none;}
+.tc-head.open + .tc-body{display:block;}
+
+/* tool details */
+.tc-args{font-family:var(--mono);font-size:10.5px;color:var(--txt2);background:var(--surface2);border-radius:5px;padding:8px 10px;margin-bottom:4px;line-height:1.7;}
+.tc-args .k{color:var(--blue);}
+.tc-args .s{color:var(--amber);}
+.tc-args .n{color:#22D3EE;}
+
+.tc-result{font-size:11px;color:var(--txt2);line-height:1.5;}
+.tc-result.ok{color:rgba(34,197,94,.8);}
+.tc-result.err{color:rgba(239,68,68,.8);}
+
+/* diff preview inside tool card */
+.tc-diff{margin-top:6px;}
+.td-line{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:3px;margin-bottom:2px;line-height:1.6;}
+.td-add{background:var(--diff-add);color:rgba(34,197,94,.8);border-left:2px solid var(--green);}
+.td-del{background:var(--diff-del);color:rgba(239,68,68,.7);border-left:2px solid var(--red);text-decoration:line-through;}
+.td-ctx{color:var(--txt3);}
+
+/* apply buttons in tool card */
+.tc-apply{display:flex;gap:5px;margin-top:8px;}
+.apply-btn{flex:1;padding:5px 8px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:.12s;display:flex;align-items:center;justify-content:center;gap:4px;}
+.apply-yes{background:var(--green-s);border:1px solid var(--green-b);color:var(--green);}
+.apply-yes:hover{background:rgba(34,197,94,.2);}
+.apply-no{background:var(--red-s);border:1px solid var(--red-b);color:var(--red);}
+.apply-no:hover{background:rgba(239,68,68,.2);}
+
+/* AI thinking */
+.thinking {
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;background:rgba(255,255,255,.02);
+  border:1px solid var(--border);border-radius:8px;
+  font-size:11.5px;color:var(--txt2);
+}
+.think-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);animation:td 1.4s ease infinite;}
+.think-dot:nth-child(2){animation-delay:.2s}
+.think-dot:nth-child(3){animation-delay:.4s}
+@keyframes td{0%,100%{opacity:.2;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+
+/* streaming text */
+.stream-text{font-size:12.5px;color:var(--txt);line-height:1.6;}
+.stream-text p{margin-bottom:8px;}
+
+/* cite in chat */
+.chat-cite{display:inline-flex;align-items:center;gap:2px;font-family:var(--mono);font-size:9.5px;color:#93ABFD;background:var(--blue-s);border:1px solid var(--blue-b);border-radius:2px;padding:0 4px;vertical-align:middle;}
+
+/* ── History items ── */
+.hist-item {
+  display:flex;align-items:center;gap:8px;
+  padding:7px 8px;border-radius:5px;cursor:pointer;
+  transition:.1s;
+}
+.hist-item:hover{background:rgba(255,255,255,.04);}
+.hi-label{font-size:12px;color:var(--txt2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hi-time{font-family:var(--mono);font-size:9.5px;color:var(--txt3);flex-shrink:0;}
+.hist-sep{font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--txt3);padding:8px 8px 4px;font-weight:600;}
+
+/* ── Input area ── */
+.input-area {
+  padding:10px 10px 12px;
+  border-top:1px solid var(--border);
+  flex-shrink:0;
+}
+.input-box {
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  transition:.15s;
+}
+.input-box:focus-within{border-color:rgba(91,124,246,.4);box-shadow:0 0 0 2px rgba(91,124,246,.08);}
+
+.input-text {
+  width:100%;padding:10px 12px 6px;
+  background:transparent;border:none;outline:none;
+  color:var(--txt);font-size:12.5px;resize:none;
+  min-height:40px;max-height:120px;line-height:1.5;
+}
+.input-text::placeholder{color:var(--txt3);}
+
+.input-footer {
+  display:flex;align-items:center;gap:4px;
+  padding:5px 8px 7px;
+}
+.if-pill {
+  display:flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:5px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  font-size:10.5px;color:var(--txt3);cursor:pointer;transition:.1s;
+}
+.if-pill:hover{background:rgba(255,255,255,.07);color:var(--txt2);}
+.if-pill .pill-ic{font-size:11px;}
+
+.send-btn {
+  margin-left:auto;
+  width:28px;height:28px;border-radius:7px;
+  background:var(--blue);border:none;color:#fff;
+  font-size:13px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:.12s;
+  box-shadow:0 0 12px rgba(91,124,246,.3);
+}
+.send-btn:hover{background:#4A6BF5;transform:scale(1.05);}
+
+/* quick action chips (above input) */
+.quick-chips {
+  display:flex;flex-wrap:wrap;gap:4px;
+  padding:8px 10px 0;
+}
+.qchip {
+  display:flex;align-items:center;gap:4px;
+  padding:4px 9px;border-radius:20px;
+  border:1px solid var(--border);background:rgba(255,255,255,.03);
+  font-size:11px;color:var(--txt2);cursor:pointer;transition:.12s;
+  white-space:nowrap;
+}
+.qchip:hover{background:var(--blue-s);border-color:var(--blue-b);color:#93ABFD;}
+.qchip .qi{font-size:11px;}
+
+/* model selector */
+.model-sel {
+  display:flex;align-items:center;gap:5px;
+  padding:3px 8px;border-radius:5px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  font-size:10.5px;color:var(--txt3);cursor:pointer;transition:.1s;
+}
+.model-sel:hover{color:var(--txt2);}
+.model-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:sdot 2.2s ease infinite;}
+
+/* ─── ANIM ─── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .35s ease both;}
+
+/* gutter numbers on paper */
+.paper-wrap{position:relative;}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ═══ TOPBAR ═══ -->
+<header class="topbar">
+  <div class="mac"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+  <div class="tb-sep"></div>
+  <div class="tb-crumb">
+    <span>Skripsi S1</span><span class="sep">›</span>
+    <span>Psikologi</span><span class="sep">›</span>
+    <span class="cur">BAB 3 — Metodologi</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="save-dot"></div>
+  <span class="save-txt">saved</span>
+  <div class="tb-r">
+    <button class="tb-btn" onclick="toggleBanner()">⌘K</button>
+    <button class="tb-btn">⬡ History</button>
+    <button class="tb-btn accent">↑ Export</button>
+  </div>
+</header>
+
+<!-- ═══ LEFT BAR ═══ -->
+<aside class="left-bar">
+  <div class="lb-head">
+    <div class="lb-proj">Pengaruh Media Sosial thd Perilaku Akademik</div>
+    <div class="lb-prog">
+      <div class="lb-bar"><div class="lb-bar-f" style="width:72%"></div></div>
+      <span class="lb-pct">72%</span>
+    </div>
+  </div>
+  <div class="lb-scroll">
+    <div class="lb-sec">Chapters</div>
+
+    <div class="ch-item" onclick="sel(this)">
+      <div class="ch-top"><span class="ch-name">BAB 1 — Pendahuluan</span><span class="ch-badge bd-done">✓</span></div>
+      <div class="ch-bar"><div class="ch-bar-f" style="width:98%;background:#22C55E"></div></div>
+    </div>
+    <div class="ch-item" onclick="sel(this)">
+      <div class="ch-top"><span class="ch-name">BAB 2 — Tinjauan Pustaka</span><span class="ch-badge bd-rev">⚡</span></div>
+      <div class="ch-bar"><div class="ch-bar-f" style="width:85%;background:#F59E0B"></div></div>
+    </div>
+    <div class="ch-item act" onclick="sel(this)">
+      <div class="ch-top"><span class="ch-name">BAB 3 — Metodologi</span><span class="ch-badge bd-act">▶</span></div>
+      <div class="ch-bar"><div class="ch-bar-f" style="width:68%;background:#5B7CF6"></div></div>
+      <div class="ch-warn">⚠ 2 uncited claims</div>
+    </div>
+    <div class="ch-item" onclick="sel(this)" style="opacity:.55">
+      <div class="ch-top"><span class="ch-name">BAB 4 — Hasil & Pembahasan</span><span class="ch-badge bd-dft">○</span></div>
+      <div class="ch-bar"><div class="ch-bar-f" style="width:0%;background:#5B7CF6"></div></div>
+    </div>
+    <div class="ch-item" onclick="sel(this)" style="opacity:.35">
+      <div class="ch-top"><span class="ch-name">BAB 5 — Penutup</span><span class="ch-badge bd-dft">○</span></div>
+    </div>
+
+    <div class="lb-sec" style="margin-top:6px;">References (47)</div>
+    <div style="padding:0 8px;display:flex;flex-direction:column;gap:1px;">
+      <div style="font-size:10.5px;color:var(--txt2);padding:4px 6px;border-radius:4px;background:rgba(255,255,255,.04);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Creswell, J.W. (2018)</div>
+      <div style="font-size:10.5px;color:var(--txt2);padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Sugiyono. (2020)</div>
+      <div style="font-size:10.5px;color:var(--txt2);padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Twenge, J.M. (2019)</div>
+      <div style="font-size:10px;color:var(--txt3);padding:3px 6px;">+ 44 more</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ EDITOR ═══ -->
+<div class="editor-col">
+
+  <!-- accept/reject banner -->
+  <div class="accept-banner" id="acceptBanner">
+    <span class="banner-label">✦ Agent proposed <strong>4 changes</strong> — review before applying</span>
+    <span class="banner-count">4 pending</span>
+    <button class="banner-btn banner-accept" onclick="acceptAll()">✓ Accept All</button>
+    <button class="banner-btn banner-reject" onclick="rejectAll()">✕ Reject All</button>
+    <button class="banner-close" onclick="closeBanner()">×</button>
+  </div>
+
+  <!-- ribbon -->
+  <div class="ribbon" style="margin-top:38px;">
+    <div style="display:flex;align-items:center;gap:1px;">
+      <button class="rb">↩</button>
+      <button class="rb" style="opacity:.3">↪</button>
+    </div>
+    <div class="rb-div"></div>
+    <button class="rb" style="font-weight:800;">B</button>
+    <button class="rb"><em>I</em></button>
+    <button class="rb" style="text-decoration:underline;">U</button>
+    <div class="rb-div"></div>
+    <button class="rb rb-wide" style="font-size:10px;">H1</button>
+    <button class="rb rb-wide" style="font-size:10px;">H2</button>
+    <button class="rb rb-wide">≡</button>
+    <button class="rb rb-wide">1.</button>
+    <div class="rb-div"></div>
+    <div class="apa-badge">APA 7 ▾</div>
+    <div class="rb-div"></div>
+    <button class="rb rb-wide" style="color:#3B82F6;">📎 Cite</button>
+    <button class="rb rb-wide">⊞</button>
+    <button class="rb rb-wide">🖼</button>
+  </div>
+
+  <!-- editor scroll -->
+  <div class="ed-scroll" id="edScroll">
+    <div class="paper-wrap">
+      <div class="paper" id="paper">
+
+        <div class="ed-eyebrow">BAB 3 · METODOLOGI PENELITIAN</div>
+        <h1 class="ed-h1">Metode & Desain Penelitian</h1>
+        <div class="ed-meta">Terakhir disimpan 2 menit lalu</div>
+
+        <h2 class="ed-h2">3.1 Pendekatan Penelitian</h2>
+
+        <!-- P-001 normal -->
+        <div class="para-block" data-pid="P-001">
+          <span class="para-id">P-001</span>
+          <div class="para-actions">
+            <button class="pa-btn" title="Edit with AI">✦</button>
+            <button class="pa-btn" title="Add paragraph below">+</button>
+            <button class="pa-btn" title="Delete paragraph">×</button>
+          </div>
+          <p class="ed-p">
+            Penelitian ini menggunakan pendekatan <em>kuantitatif</em> dengan desain penelitian survei.
+            Pendekatan ini dipilih karena peneliti bertujuan mengukur hubungan antara variabel
+            secara numerik dan dapat digeneralisasikan pada populasi lebih luas
+            <span class="cite">Creswell, 2018</span>.
+          </p>
+        </div>
+
+        <!-- P-002 focused -->
+        <div class="para-block diff-focus" data-pid="P-002">
+          <span class="para-id" style="opacity:1;color:var(--blue);">P-002</span>
+          <div class="para-actions">
+            <button class="pa-btn" title="Edit with AI">✦</button>
+            <button class="pa-btn" title="Add paragraph below">+</button>
+            <button class="pa-btn" title="Delete paragraph">×</button>
+          </div>
+          <p class="ed-p">
+            Populasi dalam penelitian ini adalah seluruh mahasiswa aktif Universitas XYZ
+            angkatan 2021–2023 yang berjumlah sekitar 8.400 mahasiswa.
+            Teknik pengambilan sampel menggunakan <em>stratified random sampling</em>
+            <span class="cite">Sugiyono, 2020</span>.
+            Jumlah sampel minimum dihitung menggunakan rumus Slovin dengan tingkat
+            kesalahan 5%, menghasilkan sampel minimal 381 responden.
+          </p>
+        </div>
+
+        <!-- P-003 EDITED by agent -->
+        <div class="para-block diff-edit" data-pid="P-003" id="paraEdit">
+          <span class="para-id" style="opacity:1;color:#93ABFD;">P-003</span>
+          <div class="para-actions">
+            <button class="pa-btn" title="Edit with AI">✦</button>
+            <button class="pa-btn" title="Add paragraph below">+</button>
+            <button class="pa-btn" title="Delete paragraph">×</button>
+          </div>
+          <p class="ed-p">
+            Instrumen penelitian menggunakan kuesioner skala Likert 5 poin yang mengukur
+            frekuensi penggunaan media sosial (Instagram, TikTok, Twitter/X) serta dampaknya
+            terhadap waktu belajar dan prestasi akademik. Reliabilitas diuji menggunakan
+            <em>Cronbach's Alpha</em> dengan nilai minimum 0.70 <span class="cite">Nunnally, 1978</span>,
+            dan hasil uji coba menunjukkan nilai α = 0.847 yang mengindikasikan
+            konsistensi internal yang baik.
+            <span class="diff-tag dt-edit">✎ edited</span>
+          </p>
+          <div class="diff-bar">
+            <span class="diff-bar-lbl">P-003</span>
+            <button class="diff-accept" onclick="acceptPara('paraEdit')">✓ Accept</button>
+            <button class="diff-reject" onclick="rejectPara('paraEdit')">✕ Reject</button>
+            <span class="diff-all">view diff</span>
+          </div>
+        </div>
+
+        <!-- P-NEW inserted by agent -->
+        <div class="para-block diff-add" data-pid="P-NEW" id="paraNew">
+          <span class="para-id" style="opacity:1;color:var(--green);">P-NEW</span>
+          <div class="para-actions">
+            <button class="pa-btn" title="Edit with AI">✦</button>
+            <button class="pa-btn" title="Add paragraph below">+</button>
+            <button class="pa-btn" title="Delete paragraph">×</button>
+          </div>
+          <p class="ed-p">
+            Validitas konstruk instrumen diuji menggunakan <em>confirmatory factor analysis</em>
+            (CFA) dengan bantuan software AMOS 24.0. Hasil analisis menunjukkan bahwa seluruh
+            indikator memiliki factor loading ≥ 0.60 dan nilai AVE ≥ 0.50, sehingga instrumen
+            dinyatakan valid secara konvergen <span class="cite">Hair et al., 2019</span>.
+            <span class="diff-tag dt-add">+ inserted</span>
+          </p>
+          <div class="diff-bar">
+            <span class="diff-bar-lbl">P-NEW</span>
+            <button class="diff-accept" onclick="acceptPara('paraNew')">✓ Accept</button>
+            <button class="diff-reject" onclick="rejectPara('paraNew')">✕ Reject</button>
+          </div>
+        </div>
+
+        <!-- P-DEL deleted by agent -->
+        <div class="para-block diff-del" data-pid="P-004" id="paraDel">
+          <span class="para-id" style="opacity:1;color:var(--red);">P-004</span>
+          <p class="ed-p" style="font-size:12.5px;">
+            Penelitian sebelumnya membuktikan bahwa penggunaan media sosial menurunkan IPK sebesar 0.3 poin.
+            <span class="diff-tag dt-del">✕ deleted</span>
+          </p>
+          <div class="diff-bar">
+            <span class="diff-bar-lbl">P-004</span>
+            <button class="diff-accept" onclick="acceptPara('paraDel')">✓ Accept Delete</button>
+            <button class="diff-reject" onclick="rejectPara('paraDel')">↩ Restore</button>
+          </div>
+        </div>
+
+        <!-- P-005 ghost text -->
+        <div class="para-block" data-pid="P-005">
+          <span class="para-id">P-005</span>
+          <p class="ed-p">
+            Teknik analisis data yang digunakan adalah <em>Structural Equation Modeling</em> (SEM)
+            dengan bantuan AMOS 24<span class="caret"></span><span class="ghost">. Pemilihan SEM didasarkan pada kemampuannya dalam menganalisis hubungan kausal antara variabel laten secara simultan, serta mempertimbangkan measurement error <span class="cite">Byrne, 2016</span>.</span>
+          </p>
+        </div>
+
+      </div><!-- end paper -->
+    </div><!-- end paper-wrap -->
+  </div><!-- end ed-scroll -->
+
+  <!-- status bar -->
+  <div class="statusbar">
+    <div class="sb-l">
+      <span class="si">Words: <span class="v">2,380</span></span>
+      <span class="si warn">⚠ <span>4 pending changes</span></span>
+      <span class="si"><span style="color:var(--blue);font-weight:600;">68%</span> <span style="width:44px;height:2px;background:rgba(255,255,255,.06);border-radius:10px;overflow:hidden;display:inline-block;vertical-align:middle;margin:0 3px;"><span style="width:68%;height:100%;background:var(--blue);display:block;border-radius:10px;"></span></span> <span style="opacity:.4">3,200 target</span></span>
+    </div>
+    <div class="sb-r">
+      <div class="voice-pill">
+        <span class="vp-score">87</span>
+        <span class="vp-lbl">Voice</span>
+      </div>
+      <span class="si" style="opacity:.35">APA 7 · UTF-8</span>
+    </div>
+  </div>
+</div><!-- end editor-col -->
+
+<!-- ═══ AGENT PANEL ═══ -->
+<aside class="agent-panel">
+  <div class="ap-head">
+    <span class="ap-title">OnThesis Agent</span>
+    <div class="ap-actions">
+      <button class="ap-ic" title="New conversation">+</button>
+      <button class="ap-ic" title="History">🕐</button>
+      <button class="ap-ic" title="Settings">⋯</button>
+    </div>
+  </div>
+
+  <!-- chat messages -->
+  <div class="chat-scroll" id="chatScroll">
+
+    <!-- History items (no conversation yet / new session) -->
+    <div id="historyView">
+      <div style="padding:20px 8px 8px;font-family:var(--mono);font-size:11px;color:var(--txt);font-weight:600;letter-spacing:-.2px;">OnThesis-AI-main</div>
+      <div style="font-size:11px;color:var(--txt2);padding:0 8px 16px;line-height:1.55;">
+        Tanya apa saja tentang thesismu, atau minta saya untuk menulis, mengedit, atau mengatur bab secara langsung.
+      </div>
+      <div class="hist-sep">Recent</div>
+      <div class="hist-item" onclick="loadConvo()"><span class="hi-label">Menulis BAB 3 Instrumen & Validitas</span><span class="hi-time">16h</span></div>
+      <div class="hist-item"><span class="hi-label">Review koherensi BAB 2</span><span class="hi-time">18h</span></div>
+      <div class="hist-item"><span class="hi-label">Setup struktur tesis awal</span><span class="hi-time">2d</span></div>
+      <div style="font-size:10.5px;color:var(--txt3);padding:6px 8px;cursor:pointer;text-decoration:underline;">See all</div>
+    </div>
+
+    <!-- Conversation (hidden by default, shown after click) -->
+    <div id="convoView" style="display:none;display:flex;flex-direction:column;gap:10px;">
+
+      <!-- User message -->
+      <div class="msg-user fade-up" style="animation-delay:.05s">
+        Tuliskan sub-bab instrumen & validitas untuk BAB 3. Pastikan konsisten dengan metodologi yang sudah ada di atas, dan tambahkan sitasi yang relevan dari referensi saya.
+      </div>
+
+      <!-- AI response with tool calls -->
+      <div class="msg-ai fade-up" style="animation-delay:.1s">
+        <div style="font-size:11.5px;color:var(--txt2);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span style="width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--cyan));display:inline-block;flex-shrink:0;"></span>
+          <span>OnThesis Agent</span>
+        </div>
+
+        <!-- Tool: read_chapter -->
+        <div class="tool-card" style="margin-bottom:6px;">
+          <div class="tc-head open" onclick="toggleTool(this)">
+            <span class="tc-icon">📖</span>
+            <span class="tc-name">read_chapter</span>
+            <span class="tc-status tc-s-done">done</span>
+            <span class="tc-chevron">›</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-args"><span class="k">chapter_id:</span> <span class="s">"bab_3"</span><br><span class="k">range:</span> <span class="s">"P-001..P-005"</span></div>
+            <div class="tc-result ok">✓ Read 5 paragraphs · BAB 3 context loaded</div>
+          </div>
+        </div>
+
+        <!-- Tool: search_references -->
+        <div class="tool-card" style="margin-bottom:6px;">
+          <div class="tc-head open" onclick="toggleTool(this)">
+            <span class="tc-icon">🔍</span>
+            <span class="tc-name">search_references</span>
+            <span class="tc-status tc-s-done">done</span>
+            <span class="tc-chevron">›</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-args"><span class="k">query:</span> <span class="s">"CFA validity Likert instrument"</span><br><span class="k">limit:</span> <span class="n">5</span></div>
+            <div class="tc-result ok">✓ Found: Hair et al. (2019), Nunnally (1978), Fornell & Larcker (1981)</div>
+          </div>
+        </div>
+
+        <!-- Tool: edit_paragraph -->
+        <div class="tool-card" style="margin-bottom:6px;">
+          <div class="tc-head open" onclick="toggleTool(this)">
+            <span class="tc-icon">✎</span>
+            <span class="tc-name">edit_paragraph</span>
+            <span class="tc-status tc-s-done">done</span>
+            <span class="tc-chevron">›</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-args"><span class="k">para_id:</span> <span class="s">"P-003"</span><br><span class="k">action:</span> <span class="s">"replace"</span></div>
+            <div class="tc-diff">
+              <div class="td-line td-del">Instrumen penelitian menggunakan kuesioner skala Likert 5 poin...</div>
+              <div class="td-line td-add">Instrumen penelitian menggunakan kuesioner skala Likert 5 poin... + ditambahkan validitas konstruk & reliabilitas alpha...</div>
+            </div>
+            <div class="tc-apply">
+              <button class="apply-btn apply-yes" onclick="acceptPara('paraEdit')">✓ Accept P-003</button>
+              <button class="apply-btn apply-no" onclick="rejectPara('paraEdit')">✕ Reject</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tool: insert_paragraph -->
+        <div class="tool-card" style="margin-bottom:6px;">
+          <div class="tc-head open" onclick="toggleTool(this)">
+            <span class="tc-icon">+</span>
+            <span class="tc-name">insert_paragraph</span>
+            <span class="tc-status tc-s-done">done</span>
+            <span class="tc-chevron">›</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-args"><span class="k">after_para_id:</span> <span class="s">"P-003"</span><br><span class="k">content:</span> <span class="s">"Validitas konstruk diuji menggunakan CFA..."</span></div>
+            <div class="tc-diff">
+              <div class="td-line td-ctx">... [P-003 ends] ...</div>
+              <div class="td-line td-add">↳ [NEW] Validitas konstruk instrumen diuji menggunakan confirmatory factor analysis (CFA)...</div>
+            </div>
+            <div class="tc-apply">
+              <button class="apply-btn apply-yes" onclick="acceptPara('paraNew')">✓ Accept insert</button>
+              <button class="apply-btn apply-no" onclick="rejectPara('paraNew')">✕ Reject</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tool: delete_paragraph -->
+        <div class="tool-card" style="margin-bottom:8px;">
+          <div class="tc-head open" onclick="toggleTool(this)">
+            <span class="tc-icon">🗑</span>
+            <span class="tc-name">delete_paragraph</span>
+            <span class="tc-status tc-s-done">done</span>
+            <span class="tc-chevron">›</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-args"><span class="k">para_id:</span> <span class="s">"P-004"</span><br><span class="k">reason:</span> <span class="s">"Uncited claim — statistik tanpa sumber"</span></div>
+            <div class="tc-diff">
+              <div class="td-line td-del">Penelitian sebelumnya membuktikan bahwa penggunaan media sosial menurunkan IPK sebesar 0.3 poin.</div>
+            </div>
+            <div class="tc-apply">
+              <button class="apply-btn apply-yes" onclick="acceptPara('paraDel')">✓ Accept delete</button>
+              <button class="apply-btn apply-no" onclick="rejectPara('paraDel')">↩ Keep</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary text -->
+        <div class="stream-text">
+          <p>Saya telah membuat <strong style="color:var(--txt);">4 perubahan</strong> pada BAB 3:</p>
+          <p style="color:var(--txt2);font-size:11.5px;">
+            • <strong style="color:rgba(91,124,246,.8)">P-003 diedit</strong> — ditambahkan penjelasan reliabilitas Cronbach's Alpha dengan sitasi <span class="chat-cite">Nunnally, 1978</span><br>
+            • <strong style="color:rgba(34,197,94,.8)">P-NEW disisipkan</strong> — paragraf baru tentang validitas CFA dengan <span class="chat-cite">Hair et al., 2019</span><br>
+            • <strong style="color:rgba(239,68,68,.8)">P-004 dihapus</strong> — klaim tanpa sitasi yang melemahkan argumen<br>
+            • Semua perubahan konsisten dengan pendekatan kuantitatif di P-001
+          </p>
+          <p style="color:var(--txt2);font-size:11px;margin-top:4px;">Review perubahan di editor dan klik Accept/Reject pada tiap paragraf, atau gunakan "Accept All" di banner atas.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- quick action chips -->
+  <div class="quick-chips" id="quickChips">
+    <div class="qchip"><span class="qi">✦</span> Lanjutkan paragraf</div>
+    <div class="qchip"><span class="qi">📎</span> Cari referensi</div>
+    <div class="qchip"><span class="qi">🔍</span> Audit BAB 3</div>
+    <div class="qchip"><span class="qi">🗄</span> Setup BAB 4</div>
+  </div>
+
+  <!-- input area -->
+  <div class="input-area">
+    <div class="input-box">
+      <textarea class="input-text" placeholder="Tanya apa saja, @ mention bab, / untuk workflows" rows="2"></textarea>
+      <div class="input-footer">
+        <div class="if-pill"><span class="pill-ic">📋</span> Planning</div>
+        <div class="model-sel">
+          <div class="model-dot"></div>
+          Claude Sonnet
+          <span style="opacity:.4;font-size:9px;">▾</span>
+        </div>
+        <button class="send-btn">↑</button>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:9.5px;color:var(--txt3);text-align:center;margin-top:7px;">AI dapat membuat kesalahan. Selalu review perubahan sebelum accept.</div>
+  </div>
+
+</aside>
+</div><!-- end app -->
+
+<script>
+/* ── Sidebar chapter select ── */
+function sel(el){document.querySelectorAll('.ch-item').forEach(c=>c.classList.remove('act'));el.classList.add('act');}
+
+/* ── Load conversation ── */
+function loadConvo(){
+  document.getElementById('historyView').style.display='none';
+  document.getElementById('convoView').style.display='flex';
+  document.getElementById('convoView').style.flexDirection='column';
+  document.getElementById('convoView').style.gap='10px';
+}
+
+/* ── Toggle tool card ── */
+function toggleTool(head){
+  head.classList.toggle('open');
+}
+
+/* ── Para accept/reject ── */
+let pendingCount = 4;
+
+function acceptPara(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.classList.remove('diff-add','diff-edit','diff-del','diff-focus');
+  // remove diff tags and diff-bar
+  el.querySelectorAll('.diff-tag,.diff-bar').forEach(e=>e.remove());
+  // remove strikethrough on deleted
+  if(id==='paraDel'){el.remove();}
+  pendingCount = Math.max(0,pendingCount-1);
+  updateBanner();
+}
+
+function rejectPara(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(id==='paraNew'){el.remove();}
+  else if(id==='paraEdit'){
+    el.classList.remove('diff-edit','diff-focus');
+    el.querySelectorAll('.diff-tag,.diff-bar').forEach(e=>e.remove());
+  } else if(id==='paraDel'){
+    el.classList.remove('diff-del');
+    el.querySelectorAll('.diff-tag,.diff-bar').forEach(e=>e.remove());
+  }
+  pendingCount = Math.max(0,pendingCount-1);
+  updateBanner();
+}
+
+function updateBanner(){
+  const b = document.getElementById('acceptBanner');
+  const cnt = b.querySelector('.banner-count');
+  if(pendingCount===0){
+    b.style.display='none';
+    // update status bar
+    document.querySelector('.si.warn').style.display='none';
+  } else {
+    cnt.textContent = pendingCount + ' pending';
+  }
+}
+
+function acceptAll(){
+  ['paraEdit','paraNew','paraDel'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    if(id==='paraDel'){el.remove();}
+    else{
+      el.classList.remove('diff-add','diff-edit','diff-del','diff-focus');
+      el.querySelectorAll('.diff-tag,.diff-bar').forEach(e=>e.remove());
+    }
+  });
+  pendingCount=0;
+  updateBanner();
+}
+
+function rejectAll(){
+  ['paraEdit','paraNew','paraDel'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    if(id==='paraNew'){el.remove();}
+    else{
+      el.classList.remove('diff-add','diff-edit','diff-del','diff-focus');
+      el.querySelectorAll('.diff-tag,.diff-bar').forEach(e=>e.remove());
+    }
+  });
+  pendingCount=0;
+  updateBanner();
+}
+
+function closeBanner(){
+  document.getElementById('acceptBanner').style.display='none';
+}
+
+function toggleBanner(){
+  const b=document.getElementById('acceptBanner');
+  b.style.display=b.style.display==='none'?'flex':'none';
+}
+
+/* ── Animate bars on load ── */
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    document.querySelectorAll('.ch-bar-f,.lb-bar-f').forEach(el=>{
+      const w=el.style.width; el.style.width='0';
+      requestAnimationFrame(()=>{el.style.transition='width 1.2s cubic-bezier(.4,0,.2,1)';el.style.width=w;});
+    });
+  },200);
+  // show conversation by default
+  loadConvo();
+});
+
+/* ── Input send ── */
+document.querySelector('.send-btn').addEventListener('click',()=>{
+  const ta=document.querySelector('.input-text');
+  if(!ta.value.trim()) return;
+  ta.value='';
+});
+
+/* ── Keyboard shortcuts ── */
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();toggleBanner();}
+});
+</script>
+</body>
+</html>

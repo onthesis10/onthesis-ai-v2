@@ -27,6 +27,8 @@ import { Button } from '@/components/ui/button';
 import { OnThesisLogo } from '@/components/ui/OnThesisLogo';
 import { cn } from '@/lib/utils';
 import heroArtwork from './assets/hero-cyber-student.png';
+import { HeroArtworkDynamic } from './HeroArtworkDynamic';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 type FeatureItem = {
     title: string;
@@ -305,6 +307,22 @@ const GLOBAL_CSS = `
 .happy .otlp-panel {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(255, 252, 245, .76));
+}
+
+.happy {
+    --primary: 24 95% 53%; /* Orange 500 */
+}
+
+.otlp-text-gradient {
+    background-image: linear-gradient(to right, hsl(var(--primary)), #38BDF8, hsl(var(--primary)));
+}
+
+.dark .otlp-text-gradient {
+    background-image: linear-gradient(to right, #38BDF8, #7DD3FC, #38BDF8);
+}
+
+.happy .otlp-text-gradient {
+    background-image: linear-gradient(to right, #FB923C, #FB7185, #FB923C); /* Orange to Rose */
 }
 
 .otlp-panel-strong {
@@ -703,6 +721,7 @@ function Navbar() {
                     </nav>
 
                     <div className="hidden items-center gap-2 sm:flex">
+                        <ThemeToggle />
                         <Button asChild variant="ghost" className="rounded-full px-5">
                             <Link to="/login">Login</Link>
                         </Button>
@@ -714,15 +733,18 @@ function Navbar() {
                         </Button>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={() => setOpen((value) => !value)}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border/70 bg-background/80 text-foreground lg:hidden"
-                        aria-label={open ? 'Tutup menu' : 'Buka menu'}
-                        aria-expanded={open}
-                    >
-                        {open ? <X size={18} /> : <Menu size={18} />}
-                    </button>
+                    <div className="flex items-center gap-2 lg:hidden">
+                        <ThemeToggle />
+                        <button
+                            type="button"
+                            onClick={() => setOpen((value) => !value)}
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border/70 bg-background/80 text-foreground"
+                            aria-label={open ? 'Tutup menu' : 'Buka menu'}
+                            aria-expanded={open}
+                        >
+                            {open ? <X size={18} /> : <Menu size={18} />}
+                        </button>
+                    </div>
                 </div>
 
                 <div
@@ -778,7 +800,7 @@ function Hero() {
                         <Reveal delay={70}>
                             <h1 className="otlp-display mt-6 text-5xl font-semibold leading-[0.94] text-foreground sm:text-6xl xl:text-7xl">
                                 Studio AI untuk skripsi yang terasa{' '}
-                                <span className="bg-gradient-to-r from-primary via-sky-300 to-primary bg-clip-text text-transparent">
+                                <span className="otlp-text-gradient bg-clip-text text-transparent">
                                     mahal, fokus, dan siap dipakai
                                 </span>{' '}
                                 dari draft sampai pembahasan.
@@ -855,13 +877,8 @@ function Hero() {
                     <Reveal delay={140}>
                         <div className="relative mx-auto w-full max-w-[720px]">
                             <div className="otlp-panel otlp-grid-card otlp-panel-strong rounded-[32px] p-3 sm:p-4">
-                                <div className="otlp-hero-art rounded-[26px] border border-white/10 bg-slate-950/90">
-                                    <img
-                                        src={heroArtwork}
-                                        alt="Mahasiswa Indonesia di workspace riset futuristik"
-                                        className="aspect-[16/11]"
-                                        loading="eager"
-                                    />
+                                <div className="rounded-[26px] border border-white/10 bg-slate-950/90 shadow-2xl">
+                                    <HeroArtworkDynamic />
                                 </div>
                             </div>
 
@@ -956,7 +973,7 @@ function ValueSection() {
                             title={
                                 <>
                                     Bukan chatbot yang kebetulan bisa menulis, melainkan{' '}
-                                    <span className="text-primary">sistem kerja skripsi</span>.
+                                    <span className="otlp-text-gradient bg-clip-text text-transparent">sistem kerja skripsi</span>.
                                 </>
                             }
                             description="OnThesis dibangun untuk problem yang benar-benar dihadapi mahasiswa akhir: naskah yang harus konsisten, sitasi yang harus aman, data yang harus terbaca, dan progres yang harus terus terasa bergerak."
@@ -1150,7 +1167,7 @@ function FlagshipSections() {
                     title={
                         <>
                             Menulis di workspace yang membaca{' '}
-                            <span className="text-primary">konteks proyek</span>, bukan sekadar
+                            <span className="otlp-text-gradient bg-clip-text text-transparent">konteks proyek</span>, bukan sekadar
                             prompt.
                         </>
                     }
@@ -1171,7 +1188,7 @@ function FlagshipSections() {
                     title={
                         <>
                             Dari dataset ke pembahasan dalam{' '}
-                            <span className="text-primary">satu flow modern</span>.
+                            <span className="otlp-text-gradient bg-clip-text text-transparent">satu flow modern</span>.
                         </>
                     }
                     description="Data Analysis OnThesis menggabungkan data view, variable view, output, assistant, dan visualisasi agar proses dari angka ke narasi terasa jauh lebih singkat."
@@ -1198,7 +1215,7 @@ function EcosystemSection() {
                     title={
                         <>
                             Semua yang biasanya tercecer kini{' '}
-                            <span className="text-primary">terkunci dalam ekosistem yang sama</span>.
+                            <span className="otlp-text-gradient bg-clip-text text-transparent">terkunci dalam ekostem yang sama</span>.
                         </>
                     }
                     description="Citation manager, paraphrase, thesis graph, history project, dan evidence of work tetap hadir sebagai bagian dari perjalanan akademik yang sama, bukan add-on yang berdiri sendiri."
@@ -1224,7 +1241,7 @@ function WorkflowSection() {
                     title={
                         <>
                             Mulai cepat, tetap rapi saat proyek{' '}
-                            <span className="text-primary">makin kompleks</span>.
+                            <span className="otlp-text-gradient bg-clip-text text-transparent">makin kompleks</span>.
                         </>
                     }
                     description="Masuk dengan konteks yang benar, pilih workspace yang sesuai, lalu ubah output agent menjadi progres yang memang bisa dipakai untuk bimbingan dan penyelesaian."
@@ -1267,14 +1284,14 @@ function PricingSection() {
         <section id="pricing" className="py-20 sm:py-28">
             <div className="container space-y-12">
                 <SectionIntro
-                    eyebrow="Pricing teaser"
+                    eyebrow="Pilihan Paket"
                     title={
                         <>
-                            Masuk ringan, naik saat ritme riset{' '}
-                            <span className="text-primary">makin serius</span>.
+                            Mulai tanpa beban, tingkatkan saat riset{' '}
+                            <span className="otlp-text-gradient bg-clip-text text-transparent">semakin mendalam</span>.
                         </>
                     }
-                    description="Pricing dibuat tetap ringkas di landing page. Struktur paket dipertahankan agar pengunjung bisa cepat membaca momentum upgrade tanpa kehilangan konteks produk."
+                    description="Pilih skema yang paling sesuai dengan ritme kerja Anda. Mulai dari fase eksplorasi awal hingga tahap analisis intensif menuju sidang akhir."
                     align="center"
                 />
 
@@ -1357,7 +1374,7 @@ function CTASection() {
                         </span>
                         <h2 className="otlp-display mx-auto mt-6 max-w-4xl text-4xl font-semibold tracking-[-0.05em] text-foreground sm:text-5xl">
                             Bawa skripsimu ke level yang lebih tenang, lebih tajam, dan lebih{' '}
-                            <span className="text-primary">siap dipertanggungjawabkan</span>.
+                            <span className="otlp-text-gradient bg-clip-text text-transparent">siap dipertanggungjawabkan</span>.
                         </h2>
                         <p className="mx-auto mt-5 max-w-2xl text-sm leading-8 text-muted-foreground sm:text-base">
                             Mulai gratis hari ini dan rasakan workspace AI yang menyatukan drafting,

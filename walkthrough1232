@@ -1,0 +1,35 @@
+# Walkthrough — Qdrant Caching Integration
+
+Berhasil mengintegrasikan Qdrant Cloud (Vector DB) sebagai layer caching untuk [ResearchAgent](file:///c:/Users/LENOVO/Downloads/OnThesis-AI-main/OnThesis-AI-main/research_agent.py#87-416). Sekarang sistem akan mengecek Qdrant terlebih dahulu sebelum melakukan pencarian API yang mahal/lambat.
+
+## Perubahan Utama
+
+1.  **Qdrant Vector DB**: Menggunakan `qdrant-client` untuk koneksi ke Qdrant Cloud.
+2.  **Gemini Embeddings**: Mengintegrasikan `google-generativeai` untuk menghasilkan embedding 3072-dimensi (`models/gemini-embedding-001`).
+3.  **Caching Logic**: [ResearchAgent](file:///c:/Users/LENOVO/Downloads/OnThesis-AI-main/OnThesis-AI-main/research_agent.py#87-416) kini memiliki logika "Cache-Aside".
+    - `[API] FROM API`: Jika data belum ada di Qdrant, panggil API.
+    - `[MEMORY] FROM CACHE`: Jika data sudah ada, ambil langsung dari Qdrant (Super Cepat ⚡).
+4.  **Automatic Save**: [PlanExecutor](file:///c:/Users/LENOVO/Downloads/OnThesis-AI-main/OnThesis-AI-main/plan_executor.py#32-159) otomatis menyimpan hasil pencarian API ke Qdrant.
+
+## Hasil Verifikasi (End-to-End)
+
+Pengujian dilakukan dengan menjalankan query yang sama dua kali secara berturut-turut.
+
+### Run 1: Cold Start (Hit API)
+Log menunjukkan sistem tidak menemukan cache dan memanggil API Unified Search.
+```text
+INFO:research_agent:| API | [RESEARCH] No cache found. Searching Unified API for: 'impact of artificial intelligence on healthcare' [FROM API]
+```
+
+### Run 2: Cached Hit (Memory)
+Log menunjukkan sistem langsung mengambil dari Qdrant (Memory) tanpa hit API.
+```text
+INFO:research_agent:| MEMORY | [RESEARCH] Found 10 papers in Qdrant for query: 'impact of artificial intelligence on healthcare' [FROM CACHE]
+```
+
+> [!NOTE]
+> Terkadang Qdrant Cloud (Free Tier) memberikan `UnexpectedResponse` jika terkena limit atau timeout. Kode sudah dilengkapi fallback sbb: jika cloud gagal, sistem otomatis pakai **Local In-Memory Qdrant** agar user tetap bisa bekerja.
+
+## What's Next?
+- [ ] Implementasi [DocumentMemory](file:///c:/Users/LENOVO/Downloads/OnThesis-AI-main/OnThesis-AI-main/memory_system.py#252-314) (Thesis chunks) menggunakan Qdrant.
+- [ ] Optimasi threshold pencarian semantik.

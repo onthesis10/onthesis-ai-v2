@@ -1,0 +1,68 @@
+﻿.\venv\Scripts\python : [92m10:39:47 - 
+LiteLLM:WARNING[0m: get_model_cost_map.py:213 
+- LiteLLM: Failed to fetch remote model cost 
+map from https://raw.githubusercontent.com/Berr
+iAI/litellm/main/model_prices_and_context_windo
+w.json: The read operation timed out. Falling 
+back to local backup.
+At line:1 char:1
++ .\venv\Scripts\python test_qdrant.py > 
+test_qdrant_debug.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   [92m10:39:47 -...o local backup.:String) [  
+  ], RemoteException
+    + FullyQualifiedErrorId : NativeCommandErr 
+   or
+ 
+WARNING:LiteLLM:LiteLLM: Failed to fetch 
+remote model cost map from https://raw.githubus
+ercontent.com/BerriAI/litellm/main/model_prices
+_and_context_window.json: The read operation 
+timed out. Falling back to local backup.
+C:\Users\LENOVO\Downloads\OnThesis-AI-main\OnTh
+esis-AI-main\venv\lib\site-packages\google\api_
+core\_python_version_support.py:275: 
+FutureWarning: You are using a Python version 
+(3.10.11) which Google will stop supporting in 
+new releases of google.api_core once it 
+reaches its end of life (2026-10-04). Please 
+upgrade to the latest Python version, or at 
+least Python 3.11, to continue receiving 
+updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+INFO:sentence_transformers.SentenceTransformer:
+Use pytorch device_name: cpu
+INFO:sentence_transformers.SentenceTransformer:
+Load pretrained SentenceTransformer: 
+paraphrase-multilingual-MiniLM-L12-v2
+Warning: You are sending unauthenticated 
+requests to the HF Hub. Please set a HF_TOKEN 
+to enable higher rate limits and faster 
+downloads.
+WARNING:huggingface_hub.utils._http:Warning: 
+You are sending unauthenticated requests to 
+the HF Hub. Please set a HF_TOKEN to enable 
+higher rate limits and faster downloads.
+C:\Users\LENOVO\Downloads\OnThesis-AI-main\OnTh
+esis-AI-main\venv\lib\site-packages\huggingface
+_hub\file_download.py:760: UserWarning: Not 
+enough free disk space to download the file. 
+The expected file size is: 470.64 MB. The 
+target location C:\Users\LENOVO\.cache\huggingf
+ace\hub\models--sentence-transformers--paraphra
+se-multilingual-MiniLM-L12-v2\blobs only has 
+119.39 MB free disk space.
+  warnings.warn(
+Warning: Failed to load sentence-transformers: Can't load the model for 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'. If you were trying to load it from 'https://huggingface.co/models', make sure you don't have a local directory with the same name. Otherwise, make sure 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' is the correct path to a directory containing a file named pytorch_model.bin.
+QDRANT_URL: https://63d0ed41-43ed-4a1b-b71e-6a3920dd6b05.us-east4-0.gcp.cloud.qdrant.io
+QDRANT_API_KEY: ***
+Initialize QdrantVectorDB...
+
+Inserting dummy paper into Qdrant...
+Waiting a second for indexing...
+
+Searching for semantic match with query 'artificial intelligence in education'...
+DEBUG get_papers: empty search result for artificial intelligence in education
+Done. No matching papers found over the relevance threshold.
