@@ -1,0 +1,38 @@
+
+[2026-04-09 10:51:38.384999] STARTUP CRASH:
+Traceback (most recent call last):
+  File "/home/chand/Downloads/onthesis-ai/run.py", line 66, in main
+    socketio.run(
+    ~~~~~~~~~~~~^
+        app,
+        ^^^^
+    ...<4 lines>...
+        log_output=True
+        ^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/flask_socketio/__init__.py", line 740, in run
+    self.wsgi_server.serve_forever()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/baseserver.py", line 401, in serve_forever
+    self.start()
+    ~~~~~~~~~~^^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/baseserver.py", line 339, in start
+    self.init_socket()
+    ~~~~~~~~~~~~~~~~^^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/pywsgi.py", line 1672, in init_socket
+    StreamServer.init_socket(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/server.py", line 173, in init_socket
+    self.socket = self.get_listener(self.address, self.backlog, self.family)
+                  ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/server.py", line 185, in get_listener
+    return _tcp_listener(address, backlog=backlog, reuse_addr=cls.reuse_addr, family=family)
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/server.py", line 264, in _tcp_listener
+    sock.bind(address)
+    ~~~~~~~~~^^^^^^^^^
+  File "/home/chand/Downloads/onthesis-ai/.venv/lib/python3.13/site-packages/gevent/_socketcommon.py", line 543, in bind
+    return self._sock.bind(address)
+           ~~~~~~~~~~~~~~~^^^^^^^^^
+OSError: [Errno 98] Address already in use: ('0.0.0.0', 5000)
+--------------------------------------------------

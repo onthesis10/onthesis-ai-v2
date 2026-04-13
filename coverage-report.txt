@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/chand/Downloads/onthesis-ai
+plugins: cov-7.1.0
+collected 83 items
+
+tests/test_supervisor_runtime.py ........................                [ 28%]
+tests/test_planner.py .................                                  [ 49%]
+tests/test_executor.py ................                                  [ 68%]
+tests/test_intent_classifier.py ......................                   [ 95%]
+tests/test_sse_diff.py ....                                              [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.12-final-0 _______________
+
+Name                             Stmts   Miss  Cover   Missing
+--------------------------------------------------------------
+app/agent/citation_router.py         7      0   100%
+app/agent/intent_classifier.py      96      6    94%   222-223, 278, 351-353
+app/agent/plan_executor.py         244     65    73%   51, 58, 63-65, 79-80, 96-115, 169-170, 181, 189, 203-204, 217, 237-240, 253, 258-261, 309, 320-343, 368-373, 391, 433, 435
+app/agent/supervisor.py            302     50    83%   160, 176, 190, 212, 237, 259, 288-301, 324, 330, 341-342, 346, 350, 362-367, 372, 382, 468-474, 484-485, 490-494, 497-502, 530, 545, 575
+app/agent/task_planner.py          237     41    83%   144, 271-280, 286-304, 315, 326, 349, 372, 538, 541, 560-562, 580, 595, 629, 653-682, 707-724, 800, 881-934
+--------------------------------------------------------------
+TOTAL                              886    162    82%
+============================== 83 passed in 4.65s ==============================
