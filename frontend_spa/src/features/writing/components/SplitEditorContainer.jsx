@@ -44,8 +44,12 @@ export default function SplitEditorContainer({ onClose }) {
                 chapterId: splitChapterId,
                 content: htmlString,
                 title: currentChapter?.title || 'Bab Tanpa Judul',
-                index: currentChapter?.index || 0
-            }, { silent: true });
+                index: currentChapter?.index || 0,
+                saveMode: 'autosave',
+            }, {
+                silent: true,
+                headers: { 'X-Save-Mode': 'autosave' },
+            });
         } catch (err) {
             console.error("[SplitEditor] Save failed:", err);
         }

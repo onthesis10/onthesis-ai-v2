@@ -616,7 +616,7 @@ document.addEventListener('alpine:init', () => {
                 html += `<div class="p-4 bg-slate-50 rounded border border-slate-200 text-xs font-mono overflow-auto max-h-96">${JSON.stringify(realData, null, 2)}</div>`;
             }
 
-            html += `</div><div class="bg-indigo-50 px-6 py-4 border-t border-indigo-100 flex justify-between items-center"><div><h4 class="text-sm font-bold text-indigo-900">Lanjut ke Bab 4?</h4><p class="text-xs text-indigo-700">AI akan menyusun narasi dari data ini.</p></div><button onclick="window.location.href='/writing-assistant?id=${new URLSearchParams(window.location.search).get('id')}'" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-md">Buka Studio</button></div></div>`;
+            html += `</div><div class="bg-indigo-50 px-6 py-4 border-t border-indigo-100 flex justify-between items-center"><div><h4 class="text-sm font-bold text-indigo-900">Lanjut ke Bab 4?</h4><p class="text-xs text-indigo-700">AI akan menyusun narasi dari data ini.</p></div><button onclick="window.location.href='/writing?id=${new URLSearchParams(window.location.search).get('id')}'" class="px-5 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition shadow-md">Buka Studio</button></div></div>`;
             return html;
         },        
         // ====================================================================

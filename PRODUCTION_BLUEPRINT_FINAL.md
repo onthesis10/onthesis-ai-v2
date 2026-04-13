@@ -77,7 +77,7 @@ users/{uid}
         last_reset
     created_at
 ```
-
+     
 ### 2) `projects`
 
 ```text

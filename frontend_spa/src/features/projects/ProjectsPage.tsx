@@ -6,21 +6,31 @@ import { ProjectModal } from './components/ProjectModal';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { Project } from './types';
 import toast from 'react-hot-toast';
-import {
-    collection,
-    query,
-    where,
-    onSnapshot,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc,
-    serverTimestamp,
-    Timestamp
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useThemeStore } from '@/store/themeStore';
 import { cn } from '@/lib/utils';
+
+const toMillis = (value: any) => {
+    if (!value) return 0;
+    if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    if (typeof value === 'number') return value;
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    return 0;
+};
+
+const normalizeProject = (raw: any): Project => ({
+    id: raw.id,
+    userId: raw.userId || '',
+    title: raw.title || 'Tanpa Judul',
+    description: raw.description || '',
+    status: raw.status || 'DRAFT',
+    progress: Number(raw.progress || 0),
+    endDate: raw.endDate || raw.end_date || null,
+    createdAt: raw.createdAt || raw.created_at || null,
+    lastUpdated: raw.lastUpdated || raw.updatedAt || raw.updated_at || null,
+});
 
 export default function ProjectsPage() {
     const navigate = useNavigate();
@@ -38,6 +48,23 @@ export default function ProjectsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | undefined>(undefined);
     const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; projectId: string | null }>({ isOpen: false, projectId: null });
+
+    const loadProjects = async () => {
+        try {
+            const response = await fetch('/api/projects');
+            const payload = await response.json();
+            if (!response.ok || payload.status !== 'success') throw new Error(payload.message || 'Failed to load projects');
+
+            const loadedProjects = (payload.projects || []).map(normalizeProject) as Project[];
+            loadedProjects.sort((a, b) => toMillis(b.lastUpdated) - toMillis(a.lastUpdated));
+            setProjects(loadedProjects);
+        } catch (error) {
+            console.error("Error fetching projects:", error);
+            toast.error("Gagal memuat proyek.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // --- THEME CONFIGURATION (Clean & Minimalist) ---
     const themeStyles = {
@@ -76,20 +103,13 @@ export default function ProjectsPage() {
 
     // --- FETCH PROJECTS ---
     useEffect(() => {
-        if (!user || !user.uid) return;
-        const q = query(collection(db, "projects"), where("userId", "==", user.uid));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const loadedProjects = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Project[];
-            // Sort by latest
-            loadedProjects.sort((a, b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0));
-            setProjects(loadedProjects);
+        if (!user || !user.uid) {
             setLoading(false);
-        }, (error) => {
-            console.error("Error fetching projects:", error);
-            toast.error("Gagal memuat proyek.");
-            setLoading(false);
-        });
-        return () => unsubscribe();
+            setProjects([]);
+            return;
+        }
+        setLoading(true);
+        loadProjects();
     }, [user]);
 
     // --- ACTIONS ---
@@ -98,19 +118,27 @@ export default function ProjectsPage() {
         try {
             const payload = {
                 ...data,
-                userId: user.uid,
-                lastUpdated: serverTimestamp(),
-                ...(!editingProject ? { createdAt: serverTimestamp() } : {})
+                endDate: data.endDate instanceof Date ? data.endDate.toISOString() : data.endDate,
             };
-            if (data.endDate instanceof Date) payload.endDate = Timestamp.fromDate(data.endDate);
 
             if (editingProject) {
-                await updateDoc(doc(db, "projects", editingProject.id), payload);
+                const response = await fetch(`/api/projects/${editingProject.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) throw new Error('Failed to update project');
                 toast.success("Proyek diperbarui!");
             } else {
-                await addDoc(collection(db, "projects"), payload);
+                const response = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) throw new Error('Failed to create project');
                 toast.success("Proyek baru dibuat!");
             }
+            await loadProjects();
             setIsModalOpen(false);
         } catch (error) {
             console.error("Error saving:", error);
@@ -125,7 +153,11 @@ export default function ProjectsPage() {
     const handleConfirmDelete = async () => {
         if (!deleteConfirm.projectId) return;
         try {
-            await deleteDoc(doc(db, "projects", deleteConfirm.projectId));
+            const response = await fetch(`/api/projects/${deleteConfirm.projectId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete project');
+            await loadProjects();
             toast.success("Proyek dihapus.");
         } catch (error) {
             console.error("Error deleting:", error);
@@ -248,7 +280,7 @@ export default function ProjectsPage() {
                                     project={project}
                                     onEdit={(p) => { setEditingProject(p); setIsModalOpen(true); }}
                                     onDelete={handleDeleteClick}
-                                    onClick={(id) => navigate(`/writing?project_id=${id}`)}
+                                    onClick={(id) => navigate(`/writing?id=${id}`)}
                                 />
                             </div>
                         ))}

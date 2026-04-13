@@ -20,6 +20,15 @@ from datetime import datetime
 
 from . import analysis_bp
 logger = logging.getLogger(__name__)
+_analysis_chat_supervisor = None
+
+
+def get_analysis_chat_supervisor():
+    global _analysis_chat_supervisor
+    if _analysis_chat_supervisor is None:
+        from app.agent.supervisor import SupervisorAgent
+        _analysis_chat_supervisor = SupervisorAgent()
+    return _analysis_chat_supervisor
 
 # --- HALAMAN VIEW ---
 
@@ -509,18 +518,54 @@ def ai_chat():
     
     mock_user = type('User', (object,), {'id': 'guest', 'is_pro': True})()
 
-    payload = {
-        'task': 'chat',
-        'data': {
-            'content': user_msg,
-            'context': data_context
-        }
-    }
-
     def generate():
+        from gevent import spawn
+        from gevent.queue import Queue
+
+        supervisor = get_analysis_chat_supervisor()
+        event_queue = Queue()
+        worker_state = {}
+        done_sentinel = "__ANALYSIS_CHAT_DONE__"
+        emitted_text_delta = {"value": False}
+
+        runtime_context = {
+            "projectId": "analysis_guest",
+            "chapterId": "",
+            "analysis_context": data_context,
+            "_mode": "planning",
+        }
+
+        def on_event(event_type, payload):
+            if event_type == "TEXT_DELTA":
+                emitted_text_delta["value"] = True
+                event_queue.put(str((payload or {}).get("delta", "")))
+
+        def worker():
+            try:
+                worker_state["result"] = supervisor.process_request(
+                    user_id=str(mock_user.id),
+                    message=user_msg,
+                    context=runtime_context,
+                    on_event=on_event,
+                )
+            except Exception as e:
+                worker_state["error"] = str(e)
+            finally:
+                event_queue.put(done_sentinel)
+
+        spawn(worker)
+
         try:
-            for chunk in AIService.writing_assistant_stream(mock_user, payload):
-                yield chunk
+            while True:
+                chunk = event_queue.get()
+                if chunk == done_sentinel:
+                    break
+                if chunk:
+                    yield chunk
+            if worker_state.get("error"):
+                yield f"Error: {worker_state['error']}"
+            elif worker_state.get("result") and not emitted_text_delta["value"]:
+                yield str(worker_state["result"])
         except Exception as e:
             yield f"Error: {str(e)}"
 

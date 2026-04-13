@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Library, Sparkles, RefreshCw, RotateCcw, 
-    FileText, ArrowDownToLine, Play, Bot, AlertCircle 
+    Library, Sparkles, RefreshCw,
+    ArrowDownToLine, Play, Bot
 } from 'lucide-react';
 import { useToast } from '../UI/ToastProvider.jsx';
 import { useProject } from '../../context/ProjectContext.jsx'; 
-import { api } from '../../api/client.js'; 
 
 // Helper Session (Supaya data gak hilang pas refresh)
 function useSessionState(key, defaultValue) {
@@ -37,6 +36,58 @@ export default function LiteratureReviewWorkbench({
     // CONTENT STATE
     const [generatedContent, setGeneratedContent] = useSessionState('onthesis_bab2_content', {});
     const [loadingSubChapter, setLoadingSubChapter] = useState(null); // ID sub-bab yang lagi digenerate
+
+    const streamAgentText = async ({ task, chapterId = 'chapter_2', context = {}, onTextDelta }) => {
+        const response = await fetch('/api/agent/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                task,
+                projectId: project?.id || 'writing-workbench',
+                chapterId,
+                context,
+            }),
+        });
+
+        if (!response.ok) {
+            const message = await response.text().catch(() => '');
+            throw new Error(message || 'Gagal memanggil agent runtime');
+        }
+        if (!response.body) throw new Error('No stream body');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullText = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split('\n\n');
+            buffer = events.pop() || '';
+
+            for (const rawEvent of events) {
+                const trimmed = rawEvent.trim();
+                if (!trimmed.startsWith('data:')) continue;
+                const payload = trimmed.replace(/^data:\s*/, '');
+                if (!payload || payload === '[DONE]') continue;
+
+                const event = JSON.parse(payload);
+                if (event.type === 'TEXT_DELTA') {
+                    const chunk = event.delta || '';
+                    fullText += chunk;
+                    onTextDelta?.(chunk);
+                }
+                if (event.type === 'ERROR') {
+                    throw new Error(event.message || 'Agent runtime gagal');
+                }
+            }
+        }
+
+        return fullText.trim();
+    };
 
     // --- HELPER: PARSER AGRESIF ---
     // Mencoba mengekstrak struktur outline dari teks mentah jika JSON gagal
@@ -87,10 +138,23 @@ export default function LiteratureReviewWorkbench({
         try {
             console.log("Generating outline for:", judul);
             
-            // Panggil API
-            const response = await api.post('/api/generate-outline', {
-                judul_penelitian: judul,
-                methodology: project?.methodology || 'Kualitatif'
+            const outlineTask = [
+                `Susun outline kajian pustaka Bab 2 untuk judul penelitian berikut: "${judul}".`,
+                `Metodologi penelitian: ${project?.methodology || 'Kualitatif'}.`,
+                'Kembalikan hanya outline terstruktur dalam JSON array.',
+                'Setiap item harus berbentuk {"sub_bab": "...", "poin_pembahasan": ["...", "..."]}.',
+                'Minimal 3 sub-bab, fokus pada landasan teori, penelitian terdahulu, dan kerangka berpikir atau hipotesis bila relevan.',
+            ].join('\n');
+
+            const response = await streamAgentText({
+                task: outlineTask,
+                context: {
+                    requestedTask: 'generate_outline',
+                    context_title: judul,
+                    context_method: project?.methodology || 'Kualitatif',
+                    references_raw: savedReferences,
+                    references_text: savedReferences.map((r) => `${r.author || r.authors || 'Unknown'} (${r.year || 'n.d.'}): ${r.title || 'Untitled'}`).join('\n'),
+                },
             });
 
             console.log("Outline Response Raw:", response); // DEBUG LOG
@@ -103,21 +167,36 @@ export default function LiteratureReviewWorkbench({
                 cleanData = response;
             }
             // Prioritas 2: Jika response.data adalah array (Standard API)
-            else if (response.data && Array.isArray(response.data)) {
-                cleanData = response.data;
-            }
-            // Prioritas 3: Format Legacy/Fallback JSON Object
-            else if (response.outline) {
-                if (Array.isArray(response.outline)) {
-                    cleanData = response.outline;
-                } else if (typeof response.outline === 'object') {
-                    cleanData = Object.keys(response.outline).map(key => ({
-                        sub_bab: key,
-                        poin_pembahasan: response.outline[key]
-                    }));
+            else {
+                let parsed;
+                try {
+                    const jsonMatch = response.match(/\[[\s\S]*\]/);
+                    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : response);
+                } catch {
+                    try {
+                        const jsonMatch = response.match(/\{[\s\S]*\}/);
+                        parsed = JSON.parse(jsonMatch ? jsonMatch[0] : response);
+                    } catch {
+                        parsed = null;
+                    }
+                }
+
+                if (Array.isArray(parsed)) {
+                    cleanData = parsed;
+                } else if (parsed && Array.isArray(parsed.data)) {
+                    cleanData = parsed.data;
+                } else if (parsed?.outline) {
+                    if (Array.isArray(parsed.outline)) {
+                        cleanData = parsed.outline;
+                    } else if (typeof parsed.outline === 'object') {
+                        cleanData = Object.keys(parsed.outline).map(key => ({
+                            sub_bab: key,
+                            poin_pembahasan: parsed.outline[key]
+                        }));
+                    }
                 }
             }
-            
+
             // --- EMERGENCY FALLBACK: TEXT PARSING ---
             // Jika backend mengirim string teks panjang (draft skripsi)
             if ((!cleanData || cleanData.length === 0) && typeof response === 'string') {
@@ -189,44 +268,37 @@ export default function LiteratureReviewWorkbench({
             const refList = savedReferences.map(r => 
                 `- ${r.author} (${r.year}): ${r.title}`
             ).join("\n");
-
-            const payload = {
-                task: 'content_specific', 
-                data: {
-                    sub_bab: subBabItem.sub_bab,
-                    points: subBabItem.poin_pembahasan,
-                    context_material: refList,
-                    context_title: project?.title,
-                    context_method: project?.methodology
-                }
-            };
+            const instruction = [
+                `Tuliskan sub-bab literature review "${subBabItem.sub_bab}" dalam bahasa Indonesia akademik.`,
+                `Fokus pembahasan: ${(subBabItem.poin_pembahasan || []).join('; ') || 'bahasan utama sub-bab ini'}.`,
+                refList ? `Gunakan referensi berikut bila relevan:\n${refList}` : '',
+            ].filter(Boolean).join('\n\n');
 
             setGeneratedContent(prev => ({
                 ...prev,
                 [subBabItem.sub_bab]: "" // Reset konten lama
             }));
 
-            const response = await fetch('/api/writing-assistant', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+            await streamAgentText({
+                task: instruction,
+                chapterId: 'chapter_2',
+                context: {
+                    requestedTask: 'literature_review',
+                    context_title: project?.title || topic || '',
+                    context_method: project?.methodology || '',
+                    active_paragraphs: [],
+                    references_text: refList,
+                    references_raw: savedReferences,
+                    sub_bab: subBabItem.sub_bab,
+                    points: subBabItem.poin_pembahasan || [],
+                },
+                onTextDelta: (chunk) => {
+                    setGeneratedContent(prev => ({
+                        ...prev,
+                        [subBabItem.sub_bab]: (prev[subBabItem.sub_bab] || "") + chunk
+                    }));
+                },
             });
-
-            if (!response.body) throw new Error("No stream body");
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                
-                setGeneratedContent(prev => ({
-                    ...prev,
-                    [subBabItem.sub_bab]: (prev[subBabItem.sub_bab] || "") + chunk
-                }));
-            }
 
         } catch (error) {
             console.error("Generate Content Error:", error);

@@ -48,6 +48,21 @@ def create_app():
     app.config["FIREBASE_STORAGE_BUCKET"] = os.getenv("FIREBASE_STORAGE_BUCKET")
     app.config["FIREBASE_MESSAGING_SENDER_ID"] = os.getenv("FIREBASE_MESSAGING_SENDER_ID")
     app.config["FIREBASE_APP_ID"] = os.getenv("FIREBASE_APP_ID")
+    app.config["FIREBASE_MEASUREMENT_ID"] = os.getenv("FIREBASE_MEASUREMENT_ID")
+
+    @app.context_processor
+    def inject_firebase_client_config():
+        return {
+            "firebase_client_config": {
+                "apiKey": app.config.get("FIREBASE_API_KEY"),
+                "authDomain": app.config.get("FIREBASE_AUTH_DOMAIN"),
+                "projectId": app.config.get("FIREBASE_PROJECT_ID"),
+                "storageBucket": app.config.get("FIREBASE_STORAGE_BUCKET"),
+                "messagingSenderId": app.config.get("FIREBASE_MESSAGING_SENDER_ID"),
+                "appId": app.config.get("FIREBASE_APP_ID"),
+                "measurementId": app.config.get("FIREBASE_MEASUREMENT_ID"),
+            }
+        }
 
     @app.before_request
     def log_request_info():
@@ -111,7 +126,9 @@ def create_app():
 
     # --- 2. SETUP FIREBASE (AUTO-DETECT) ---
     if not firebase_admin._apps:
-        cred_path = os.getenv("FIREBASE_CREDENTIALS")
+        cred_path = os.getenv("FIREBASE_CREDENTIALS") or os.getenv("FIREBASE_CREDENTIALS_JSON")
+        if cred_path:
+            cred_path = cred_path.strip().strip('"').strip("'")
 
         # Kalau .env kosong, cari file serviceAccountKey.json di folder root
         if not cred_path:
@@ -282,11 +299,6 @@ def create_app():
     from app.routes.agent import agent_api_bp
 
     app.register_blueprint(agent_api_bp)
-
-    # Writing Studio API
-    from app.api.writing_studio import writing_studio_bp
-
-    app.register_blueprint(writing_studio_bp, url_prefix="/api/writing_studio")
 
     # Thesis Brain - Research Graph API
     from app.api.research_graph_api import research_graph_bp

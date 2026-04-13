@@ -2,21 +2,17 @@ import os
 import json
 import logging
 import datetime
-import urllib.parse
 import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
-import urllib.request
-from urllib.error import URLError, HTTPError
 import litellm
 import sys
-import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '...')))
 try:
     from app.utils.search_utils import unified_search
 except ImportError:
-    pass
+    unified_search = None
 from .memory_system import build_memory_prompt_context
 
 # Configurasi logging
@@ -84,6 +80,7 @@ class StoredPaper:
     doi: str
     source: str            # "openalex" | "semantic_scholar" | "manual"
     topics: List[str]      # tag topik
+    citation_key: str = ""
     is_academic_source: bool = True
     last_refreshed_at: Optional[str] = None
     expires_at: Optional[str] = None
@@ -101,6 +98,294 @@ class ResearchAgent:
         
         if not self.api_key:
             logger.warning("LLM_API_KEY environment variable is not set. Extract findings using LLM might fail.")
+
+    @staticmethod
+    def _is_env_enabled(name: str, default: bool = True) -> bool:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _log_search_backend_status(self) -> None:
+        openalex_enabled = self._is_env_enabled("OPENALEX_ENABLED", default=True)
+        web_enabled = self._is_env_enabled("WEB_SEARCH_ENABLED", default=True)
+        if not openalex_enabled and not web_enabled:
+            logger.warning("No search backend configured! OPENALEX_ENABLED=false and WEB_SEARCH_ENABLED=false.")
+
+    def _search_web_fallback(self, query: str, limit: int, field: str = "") -> List[Dict[str, Any]]:
+        try:
+            from app.agent.web_search_tool import WebSearchAgent
+
+            logger.info("search_papers fallback: trying web search for query=%r", query)
+            web_results = WebSearchAgent().search_academic(query, num_results=limit)
+            normalized = self._normalize_web_results(
+                query=query,
+                web_results=web_results or [],
+                field=field,
+            )
+            logger.info("search_papers fallback: web search returned %s papers", len(normalized))
+            return normalized
+        except Exception as web_error:
+            logger.error("search_papers web fallback failed for query=%r: %s", query, web_error)
+            return []
+
+    @staticmethod
+    def _search_stop_words() -> set[str]:
+        return {
+            'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were', 'been', 'being',
+            'have', 'has', 'had', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+            'shall', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+            'between', 'under', 'over', 'such', 'each', 'which', 'their', 'there', 'then', 'than',
+            'them', 'these', 'those', 'some', 'other', 'also', 'more', 'most', 'only', 'very', 'just',
+            'but', 'not', 'nor', 'yet', 'both', 'either', 'neither', 'while', 'its', 'our', 'your',
+            'carikan', 'tolong', 'cari', 'paper', 'jurnal', 'tentang', 'mengenai', 'buatkan', 'buat',
+            'artikel', 'cariin', 'topik', 'yang', 'dan', 'di', 'ke', 'dari', 'untuk', 'pada', 'dalam',
+        }
+
+    def _tokenize_search_text(self, text: str) -> List[str]:
+        stop_words = self._search_stop_words()
+        return [
+            token for token in re.split(r'\s+', str(text or ""))
+            if token and token.lower() not in stop_words and len(token) > 2
+        ]
+
+    def _build_query_phrases(self, query: str, query_keywords: List[str], field: str = "") -> List[str]:
+        query_words_all = str(query or "").lower().split()
+        query_phrases: List[str] = []
+        for idx in range(len(query_words_all) - 1):
+            phrase = query_words_all[idx] + ' ' + query_words_all[idx + 1]
+            if any(word in query_keywords for word in [query_words_all[idx], query_words_all[idx + 1]]):
+                query_phrases.append(phrase)
+        if query:
+            query_phrases.append(query.lower())
+        if field:
+            query_phrases.append(field.lower())
+        return list(dict.fromkeys(p for p in query_phrases if p))
+
+    def _infer_source(self, item: Dict[str, Any]) -> str:
+        explicit_source = str(item.get("source") or "").strip().lower()
+        if explicit_source:
+            if explicit_source in {"web", "web_search"}:
+                return "web"
+            if explicit_source in {"crossref", "openalex", "doaj", "pubmed", "eric"}:
+                return explicit_source
+
+        item_id = str(item.get("id") or item.get("paper_id") or "").lower()
+        if "openalex.org" in item_id or item_id.startswith("https://openalex.org"):
+            return "openalex"
+        if item_id.startswith("crossref_"):
+            return "crossref"
+        if item_id.startswith("doaj_"):
+            return "doaj"
+        if item_id.startswith("pubmed_"):
+            return "pubmed"
+        if item_id.startswith("eric_"):
+            return "eric"
+        return "openalex"
+
+    def _slugify(self, value: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "_", str(value or "").lower()).strip("_")
+        return slug or "unknown"
+
+    def _build_citation_key(self, title: str, authors: List[str], year: int, doi: str) -> str:
+        normalized_doi = str(doi or "").strip().lower()
+        if normalized_doi:
+            return self._slugify(normalized_doi)
+
+        first_author = authors[0] if authors else "unknown"
+        author_slug = self._slugify(first_author.split(",")[0].split()[-1] if first_author else "unknown")
+        title_slug = self._slugify(title)[:48]
+        year_value = year if year else "nd"
+        return f"{author_slug}_{year_value}_{title_slug}"
+
+    def _normalize_paper_result(
+        self,
+        item: Dict[str, Any],
+        query: str,
+        source: str,
+        relevance_score: float,
+        field: str = "",
+    ) -> Dict[str, Any]:
+        title = str(item.get("title") or "No Title")
+        abstract = str(item.get("abstract") or "Abstract not available")
+        authors_raw = item.get("author") or item.get("authors") or []
+        if isinstance(authors_raw, str):
+            authors = [author.strip() for author in authors_raw.split(",") if author.strip()]
+        elif isinstance(authors_raw, list):
+            authors = [str(author).strip() for author in authors_raw if str(author).strip()]
+        else:
+            authors = []
+
+        year_raw = item.get("year", 0)
+        try:
+            year = int(year_raw or 0)
+        except (TypeError, ValueError):
+            year = 0
+
+        citation_count_raw = item.get("val", item.get("citation_count", 0))
+        try:
+            citation_count = int(citation_count_raw or 0)
+        except (TypeError, ValueError):
+            citation_count = 0
+
+        doi = str(item.get("doi") or "").strip()
+        paper_id = str(item.get("paper_id") or item.get("id") or doi or uuid.uuid5(uuid.NAMESPACE_DNS, title))
+        topics = [query]
+        if field:
+            topics.append(field)
+
+        return {
+            "paper_id": paper_id,
+            "title": title,
+            "authors": authors,
+            "year": year,
+            "abstract": abstract,
+            "source": source,
+            "citation_key": self._build_citation_key(title=title, authors=authors, year=year, doi=doi),
+            "doi": doi,
+            "relevance_score": float(relevance_score),
+            "citation_count": citation_count,
+            "topics": topics,
+            "key_findings": str(item.get("key_findings") or ""),
+            "is_academic_source": source != "web",
+        }
+
+    def _normalize_web_results(self, query: str, web_results: List[Dict[str, Any]], field: str = "") -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        for item in web_results:
+            url = str(item.get("url") or item.get("link") or item.get("title") or "web_result")
+            normalized.append(
+                self._normalize_paper_result(
+                    {
+                        "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, url)),
+                        "title": item.get("title", "Unknown"),
+                        "abstract": item.get("snippet", ""),
+                        "authors": [],
+                        "year": datetime.datetime.now().year,
+                        "doi": "",
+                    },
+                    query=query,
+                    source="web",
+                    relevance_score=0.35,
+                    field=field,
+                )
+            )
+        return normalized
+
+    def _dedupe_papers(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        unique_papers: List[Dict[str, Any]] = []
+        seen_dois = set()
+        seen_titles = set()
+        for paper in papers:
+            title_norm = str(paper.get("title") or "").lower().strip()
+            doi = str(paper.get("doi") or "").strip().lower()
+            if doi and doi not in seen_dois:
+                unique_papers.append(paper)
+                seen_dois.add(doi)
+                seen_titles.add(title_norm)
+            elif title_norm and title_norm not in seen_titles:
+                unique_papers.append(paper)
+                seen_titles.add(title_norm)
+        return unique_papers
+
+    def search_papers(
+        self,
+        query: str,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 10,
+        memory: Any = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search academic papers via unified_search and normalize every result into
+        a stable planner/runtime contract.
+        """
+        self._log_search_backend_status()
+        logger.info("search_papers called: query=%r filters=%s limit=%s", query, filters, limit)
+
+        if unified_search is None:
+            logger.error("unified_search is unavailable in ResearchAgent.search_papers")
+            return self._search_web_fallback(query=query, limit=limit, field=str((filters or {}).get("field") or "").strip())
+
+        filters = filters or {}
+        field = str(filters.get("field") or "").strip()
+        year_from = filters.get("year_from")
+
+        clean_query_words = self._tokenize_search_text(query)
+        clean_query = " ".join(clean_query_words) or str(query)
+        query_keywords = [keyword.lower() for keyword in clean_query_words]
+        query_phrases = self._build_query_phrases(query, query_keywords, field=field)
+        field_keywords = [keyword.lower() for keyword in self._tokenize_search_text(field)]
+
+        try:
+            raw_results = unified_search(
+                query=clean_query,
+                sources=['crossref', 'openalex', 'doaj', 'pubmed', 'eric'],
+                year=year_from,
+                limit=limit,
+            )
+
+            if not raw_results:
+                logger.warning("search_papers found no academic results for query=%r; trying web fallback", query)
+                return self._search_web_fallback(query=query, limit=limit, field=field)
+
+            papers: List[Dict[str, Any]] = []
+            logger.info(f"Query keywords: {query_keywords}, phrases: {query_phrases}, field_keywords: {field_keywords}")
+
+            for item in raw_results:
+                title = str(item.get('title') or 'No Title')
+                title_lower = title.lower()
+                abstract = str(item.get('abstract') or 'Abstract not available')
+                abstract_lower = abstract.lower()
+                combined_text = f"{title_lower} {abstract_lower}"
+
+                phrase_hits_title = sum(1 for phrase in query_phrases if phrase in title_lower)
+                phrase_hits_abstract = sum(1 for phrase in query_phrases if phrase in abstract_lower)
+                phrase_hits_total = phrase_hits_title + phrase_hits_abstract
+
+                title_hits = sum(1 for keyword in query_keywords if keyword in title_lower)
+                abstract_hits = sum(1 for keyword in query_keywords if keyword in abstract_lower)
+                unique_kws_found = sum(1 for keyword in query_keywords if keyword in combined_text)
+
+                if query_keywords:
+                    coverage = unique_kws_found / len(query_keywords)
+                    if coverage < 0.4 and phrase_hits_total == 0 and title_hits == 0:
+                        logger.info(f"Skipping paper (low relevance coverage={coverage:.2f}): {title[:60]}")
+                        continue
+
+                relevance = 0.3
+                if query_keywords:
+                    phrase_bonus = min(0.4, phrase_hits_total * 0.15)
+                    kw_score = (title_hits * 2 + abstract_hits) / (len(query_keywords) * 3)
+                    relevance = min(1.0, 0.3 + phrase_bonus + kw_score * 0.3)
+
+                if field_keywords:
+                    field_hits = sum(1 for keyword in field_keywords if keyword in combined_text)
+                    field_bonus = min(0.1, field_hits * 0.05)
+                    relevance = min(1.0, relevance + field_bonus)
+
+                if relevance <= 0.5:
+                    logger.info(f"Skipping paper (low relevance {relevance:.2f}): {title}")
+                    continue
+
+                source = self._infer_source(item)
+                papers.append(
+                    self._normalize_paper_result(
+                        item=item,
+                        query=query,
+                        source=source,
+                        relevance_score=relevance,
+                        field=field,
+                    )
+                )
+
+            normalized_results = self._dedupe_papers(papers)
+            logger.info("search_papers result: %s papers", len(normalized_results))
+            return normalized_results
+        except Exception as error:
+            logger.exception("search_papers failed for query=%r", query)
+            fallback_results = self._search_web_fallback(query=query, limit=limit, field=field)
+            logger.info("search_papers result after exception fallback: %s papers", len(fallback_results))
+            return fallback_results
 
     def _call_llm(self, prompt: str, system_prompt: str = RESEARCH_AGENT_SYSTEM_PROMPT, memory: Any = None) -> str:
         """
@@ -154,155 +439,6 @@ class ResearchAgent:
         except Exception as e:
             logger.error(f"Gagal memanggil LLM: {str(e)}")
             raise e
-        try:
-            # Clean query for search and keyword matching
-            stop_words = {'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'over', 'such', 'each', 'which', 'their', 'there', 'then', 'than', 'them', 'these', 'those', 'some', 'other', 'also', 'more', 'most', 'only', 'very', 'just', 'but', 'not', 'nor', 'yet', 'both', 'either', 'neither', 'while', 'its', 'our', 'your',
-                          'carikan', 'tolong', 'cari', 'paper', 'jurnal', 'tentang', 'mengenai', 'buatkan', 'buat', 'artikel', 'cariin', 'topik', 'yang', 'dan', 'di', 'ke', 'dari', 'untuk', 'pada', 'dalam'}
-            
-            clean_query_words = [w for w in re.split(r'\s+', query) if w.lower() not in stop_words and len(w) > 2]
-            clean_query = " ".join(clean_query_words)
-            if not clean_query:
-                clean_query = query # fallback if everything is stripped
-
-            # Panggil unified search yang mencakup 5 sources
-            raw_results = unified_search(query=clean_query, sources=['crossref', 'openalex', 'doaj', 'pubmed', 'eric'], limit=limit)
-            
-            if not raw_results:
-                logger.warning(f"Tidak ditemukan paper relevan untuk topik '{query}'. Trying web search fallback...")
-                # Web search fallback
-                try:
-                    from app.agent.web_search_tool import WebSearchAgent
-                    ws = WebSearchAgent()
-                    web_results = ws.search_academic(query, num_results=5)
-                    if web_results:
-                        logger.info(f"| WebFallback | Found {len(web_results)} web results for: {query}")
-                        return [
-                            {
-                                "paper_id": str(uuid.uuid5(uuid.NAMESPACE_DNS, r.get("url", r.get("title", "web_result")))),
-                                "title": r.get("title", "Unknown"),
-                                "abstract": r.get("snippet", ""),
-                                "authors": [],
-                                "year": datetime.datetime.now().year,
-                                "relevance_score": 0.35,
-                                "citation_count": 0,
-                                "doi": "",
-                                "source": "web_search",
-                                "topics": [query],
-                                "key_findings": r.get("snippet", ""),
-                                "is_academic_source": False,
-                            }
-                            for r in web_results
-                        ]
-                except Exception as ws_e:
-                    logger.warning(f"Web search fallback also failed: {ws_e}")
-                return []
-                
-            papers = []
-            # Extract keywords for strict matching - exclude stop words
-            query_keywords = [k.lower() for k in clean_query_words]
-            
-            # Build bigram phrases for better matching (e.g. "machine learning", "in education")
-            query_words_all = query.lower().split()
-            query_phrases = []
-            for i in range(len(query_words_all) - 1):
-                phrase = query_words_all[i] + ' ' + query_words_all[i + 1]
-                # Only keep phrases where at least one word is a keyword (not stop word)
-                if any(w in query_keywords for w in [query_words_all[i], query_words_all[i + 1]]):
-                    query_phrases.append(phrase)
-            # Also add the full query as a phrase
-            query_phrases.append(query.lower())
-            logger.info(f"Query keywords: {query_keywords}, phrases: {query_phrases}")
-            
-            for item in raw_results:
-                title = item.get('title', 'No Title')
-                title_lower = title.lower()
-                abstract = item.get('abstract', 'Abstract not available') or ''
-                abstract_lower = abstract.lower()
-                combined_text = title_lower + ' ' + abstract_lower
-                
-                # Bug 2: Phrase + keyword matching for relevance
-                # Check phrase matches first (higher quality signal)
-                phrase_hits_title = sum(1 for ph in query_phrases if ph in title_lower)
-                phrase_hits_abstract = sum(1 for ph in query_phrases if ph in abstract_lower)
-                phrase_hits_total = phrase_hits_title + phrase_hits_abstract
-                
-                # Individual keyword matches
-                title_hits = sum(1 for kw in query_keywords if kw in title_lower)
-                abstract_hits = sum(1 for kw in query_keywords if kw in abstract_lower)
-                total_hits = title_hits + abstract_hits
-                
-                # Check how many unique keywords are present anywhere in the text
-                unique_kws_found = sum(1 for kw in query_keywords if kw in combined_text)
-                required_unique_kws = len(query_keywords) if len(query_keywords) <= 3 else len(query_keywords) - 1
-                
-                # === RELAXED FILTER (v2) ===
-                # Old: required ALL keywords in title (too strict, blocked many valid papers)
-                # New: require >= 50% of keywords anywhere in combined text
-                if query_keywords:
-                    coverage = unique_kws_found / len(query_keywords)
-                    # Accept if: good phrase hit OR decent keyword coverage OR title has ANY keyword
-                    if coverage < 0.4 and phrase_hits_total == 0 and title_hits == 0:
-                        logger.info(f"Skipping paper (low relevance coverage={coverage:.2f}): {title[:60]}")
-                        continue
-                
-                pid = item.get('id', '')
-                doi = item.get('doi', '') or ''
-                year = item.get('year', 0)
-                if not year: year = 0
-                
-                citation_count = item.get('val', 0)
-                authors_str = item.get('author', '')
-                authors = [a.strip() for a in authors_str.split(',')] if authors_str else []
-                
-                # Bug 2: Improved relevance scoring
-                # Phrase matches give higher score than individual keyword matches
-                relevance = 0.3  # Low baseline
-                if query_keywords:
-                    # Phrase match bonus (each phrase match = 0.15)
-                    phrase_bonus = min(0.4, phrase_hits_total * 0.15)
-                    # Keyword match contribution
-                    kw_score = (title_hits * 2 + abstract_hits) / (len(query_keywords) * 3)
-                    relevance = min(1.0, 0.3 + phrase_bonus + kw_score * 0.3)
-                
-                # Filter: minimum relevance score > 0.5
-                if relevance <= 0.5:
-                    logger.info(f"Skipping paper (low relevance {relevance:.2f}): {title}")
-                    continue
-                
-                papers.append({
-                    "paper_id": str(pid),
-                    "doi": str(doi),
-                    "title": str(title),
-                    "authors": authors,
-                    "year": int(year),
-                    "citation_count": int(citation_count),
-                    "abstract": str(abstract),
-                    "relevance_score": float(relevance),
-                    "source": "unified_search",
-                    "topics": [query],
-                    "key_findings": "",
-                    "is_academic_source": True,
-                })
-            
-            # Deduplikasi (berjaga-jaga jika ada sisa dari unified search default)
-            unique_papers = []
-            seen_dois = set()
-            seen_titles = set()
-            for p in papers:
-                title_norm = p['title'].lower().strip()
-                if p['doi'] and p['doi'] not in seen_dois:
-                    unique_papers.append(p)
-                    seen_dois.add(p['doi'])
-                    seen_titles.add(title_norm)
-                elif title_norm not in seen_titles:
-                    unique_papers.append(p)
-                    seen_titles.add(title_norm)
-                    
-            return unique_papers
-            
-        except Exception as e:
-            logger.error(f"Generic Error query Unified Search: {str(e)}")
-            return []
 
     def _calculate_recency_score(self, current_year: int, paper_year: int) -> float:
         """Tiered recency score calculation sesuai blueprint."""

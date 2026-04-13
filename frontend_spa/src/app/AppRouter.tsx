@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from '@/layouts/AppShell';
+import { PublicShell } from '@/layouts/PublicShell';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import {
     FolderKanban, MessageCircle, CalendarDays, BarChart3, Users,
@@ -20,6 +21,7 @@ const PlaceholderPage = lazy(() => import('@/features/placeholder/PlaceholderPag
 const AuthPage = lazy(() => import('@/pages/AuthPage'));
 const PricingPage = lazy(() => import('@/features/pricing/PricingPage'));
 const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
+const LandingPage = lazy(() => import('@/features/marketing/LandingPage'));
 
 function SuspenseFallback() {
     return (
@@ -36,6 +38,11 @@ export function AppRouter() {
     return (
         <Suspense fallback={<SuspenseFallback />}>
             <Routes>
+                <Route element={<PublicShell />}>
+                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/pricing" element={<PricingPage />} />
+                </Route>
+
                 <Route element={<AppShell />}>
                     {/* Dashboard — with sidebar */}
                     <Route element={<DashboardLayout />}>
@@ -65,12 +72,8 @@ export function AppRouter() {
                 <Route path="/login" element={<AuthPage />} />
                 <Route path="/register" element={<AuthPage />} />
 
-                {/* Standalone Route (no sidebar) */}
-                <Route path="/pricing" element={<PricingPage />} />
-
                 {/* Redirects */}
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
         </Suspense>
     );

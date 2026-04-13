@@ -54,23 +54,58 @@ export const ParaphrasePage: React.FC = () => {
         setOutputText('');
 
         try {
-            const response = await fetch('/api/paraphrase', {
+            const projectId =
+                localStorage.getItem('last_active_project_id') ||
+                'paraphrase-workspace';
+            const response = await fetch('/api/agent/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: inputText, style: selectedStyle })
+                body: JSON.stringify({
+                    task: `Parafrase teks berikut dengan gaya ${selectedStyle} tanpa mengubah makna akademiknya:\n${inputText}`,
+                    projectId,
+                    chapterId: '',
+                    context: {
+                        requestedTask: 'paraphrase',
+                        paraphrase_style: selectedStyle,
+                        context_title: 'Paraphrase Workspace',
+                        active_paragraphs: [
+                            { paraId: 'paraphrase-input', content: inputText }
+                        ],
+                        selection_html: inputText,
+                    },
+                })
             });
 
             if (!response.body) throw new Error("No response body");
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let result = '';
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                result += chunk;
-                setOutputText(prev => prev + chunk);
+                buffer += decoder.decode(value, { stream: true });
+
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+
+                for (const rawEvent of events) {
+                    const trimmed = rawEvent.trim();
+                    if (!trimmed.startsWith('data:')) continue;
+                    const payload = trimmed.replace(/^data:\s*/, '');
+                    if (!payload || payload === '[DONE]') continue;
+
+                    const event = JSON.parse(payload);
+                    if (event.type === 'TEXT_DELTA') {
+                        const chunk = event.delta || '';
+                        result += chunk;
+                        setOutputText(prev => prev + chunk);
+                    }
+                    if (event.type === 'ERROR') {
+                        throw new Error(event.message || 'Gagal memproses paraphrase');
+                    }
+                }
             }
             calculateMetrics(inputText, result, selectedStyle);
         } catch (error) {

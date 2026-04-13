@@ -78,61 +78,11 @@ Lanjutkan (1-2 kalimat):"""
 @login_required
 @limiter.limit("20 per minute")
 def writing_quick_fix():
-    """
-    Quick fix endpoint for diagnostic issues.
-    Modes: formalize, shorten, paraphrase, improve
-    """
-    try:
-        data = request.get_json()
-        text = data.get('text', '')
-        mode = data.get('mode', 'improve')
-
-        if not text or len(text.strip()) < 5:
-            return jsonify({'result': text}), 200
-
-        prompts = {
-            'formalize': f"""Ubah kalimat berikut menjadi bahasa akademis formal. 
-JANGAN mengubah makna. HANYA formalkan gaya bahasa.
-Teks: "{text}"
-Versi formal:""",
-
-            'shorten': f"""Pecah kalimat panjang berikut menjadi 2-3 kalimat pendek yang lebih mudah dipahami.
-Pertahankan makna dan bahasa yang sama.
-Teks: "{text}"
-Versi lebih pendek:""",
-
-            'paraphrase': f"""Parafrase kalimat berikut dengan cara yang berbeda namun tetap akademis.
-Jangan ubah makna. Gunakan kata-kata berbeda dan struktur kalimat berbeda.
-Teks: "{text}"
-Versi parafrase:""",
-
-            'improve': f"""Perbaiki kalimat berikut agar lebih akademis, koheren, dan jelas.
-Teks: "{text}"
-Versi perbaikan:""",
-        }
-
-        prompt = prompts.get(mode, prompts['improve'])
-
-        response = litellm.completion(
-            model="groq/llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "Kamu adalah editor akademik. Tulis HANYA hasilnya tanpa keterangan tambahan."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=300,
-            temperature=0.5,
-            stream=False
-        )
-
-        result = response.choices[0].message.content.strip()
-        if result.startswith('"') and result.endswith('"'):
-            result = result[1:-1]
-
-        return jsonify({'result': result, 'mode': mode}), 200
-
-    except Exception as e:
-        logger.error(f"AI Edit Text Error: {e}")
-        return jsonify({'result': text, 'error': str(e)}), 200
+    return jsonify({
+        'error': 'LEGACY_WRITING_ROUTE_REMOVED',
+        'message': 'Quick fix lama sudah dipensiunkan. Gunakan runtime agent melalui /api/agent/run.',
+        'preferred_route': '/api/agent/run',
+    }), 410
 
 
 # ==============================================================================

@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 import litellm
 
@@ -219,6 +220,103 @@ class WritingAgent:
         
         if not self.api_key:
             logger.warning("LLM_API_KEY environment variable is not set. Pemanggilan LLM kemungkinan akan gagal.")
+
+    def _run_async(self, coroutine):
+        try:
+            return asyncio.run(coroutine)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(coroutine)
+            finally:
+                loop.close()
+
+    def _extract_litreview_paper_ids(self, findings: Any) -> List[str]:
+        if isinstance(findings, dict):
+            candidate_lists = []
+            for key in ("papers", "findings", "items"):
+                value = findings.get(key)
+                if isinstance(value, list):
+                    candidate_lists.append(value)
+            if candidate_lists:
+                findings = candidate_lists[0]
+            else:
+                findings = [findings]
+
+        if not isinstance(findings, list):
+            return []
+
+        paper_ids: List[str] = []
+        for item in findings:
+            if not isinstance(item, dict):
+                continue
+            paper_id = item.get("paper_id") or item.get("id")
+            if paper_id:
+                paper_ids.append(str(paper_id))
+        return list(dict.fromkeys(paper_ids))
+
+    def _get_litreview_references(self, paper_ids: List[str], memory: Any = None) -> List[Dict[str, Any]]:
+        if not paper_ids or not memory or not hasattr(memory, "research"):
+            return []
+
+        get_citations = getattr(memory.research, "get_citations", None)
+        if not callable(get_citations):
+            return []
+
+        try:
+            citations = self._run_async(get_citations(paper_ids))
+            return citations if isinstance(citations, list) else []
+        except Exception as exc:
+            logger.warning(f"Gagal mengambil citations untuk literature review: {exc}")
+            return []
+
+    def _ensure_litreview_contract(
+        self,
+        raw_output: Any,
+        references: Optional[List[Dict[str, Any]]] = None,
+        papers_used: Optional[int] = None,
+        coverage_note: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        references = references if isinstance(references, list) else None
+
+        if isinstance(raw_output, dict):
+            normalized_references = raw_output.get("references", references if references is not None else [])
+            normalized_review_text = str(raw_output.get("review_text") or "").strip()
+            normalized_papers_used = raw_output.get("papers_used")
+            normalized_coverage_note = raw_output.get("coverage_note", coverage_note if coverage_note is not None else "")
+        else:
+            normalized_references = references if references is not None else []
+            normalized_review_text = str(raw_output or "").strip()
+            normalized_papers_used = papers_used
+            normalized_coverage_note = coverage_note if coverage_note is not None else ""
+
+        if not normalized_review_text:
+            normalized_review_text = "Belum ditemukan literatur yang cukup untuk menyusun tinjauan pustaka."
+
+        if not isinstance(normalized_references, list):
+            normalized_references = []
+
+        safe_references = []
+        for reference in normalized_references:
+            if not isinstance(reference, dict):
+                continue
+            safe_references.append(
+                {
+                    "citation_key": str(reference.get("citation_key") or ""),
+                    "formatted": str(reference.get("formatted") or ""),
+                    "doi": reference.get("doi"),
+                }
+            )
+
+        if normalized_papers_used is None:
+            normalized_papers_used = papers_used if papers_used is not None else len(safe_references)
+
+        return {
+            "review_text": normalized_review_text,
+            "references": safe_references,
+            "papers_used": int(normalized_papers_used or 0),
+            "coverage_note": str(normalized_coverage_note or ""),
+        }
 
     def _call_llm(
         self,
@@ -518,8 +616,13 @@ class WritingAgent:
             return f"Error: {str(e)}"
 
     def generate_literature_review(
-        self, findings: Any, style: str = "akademik formal", language: str = "id", memory: Any = None
-    ) -> str:
+        self,
+        findings: Any,
+        style: str = "akademik formal",
+        language: str = "id",
+        min_papers: int = 5,
+        memory: Any = None,
+    ) -> Dict[str, Any]:
         """
         Menghasilkan bagian Literature Review dari temuan (findings) yang diekstrak.
         Menerima list[dict] findings ATAU string text (untuk fleksibilitas data flow).
@@ -546,10 +649,25 @@ class WritingAgent:
                 f"Data temuan:\n{findings_str}\n\n"
                 f"Tinjauan pustaka:" + anti_chatty
             )
-            return self._call_llm(prompt, max_tokens=1200, memory=memory)
+            review_text = self._call_llm(prompt, max_tokens=1200, memory=memory)
+            paper_ids = self._extract_litreview_paper_ids(findings)
+            references = self._get_litreview_references(paper_ids, memory=memory)
+            papers_used = len(references)
+            coverage_note = ""
+            if papers_used < int(min_papers or 0):
+                coverage_note = (
+                    f"Literatur yang tersedia baru mencakup {papers_used} paper; "
+                    f"minimal yang disarankan adalah {int(min_papers or 0)}."
+                )
+            return self._ensure_litreview_contract(
+                review_text,
+                references=references,
+                papers_used=papers_used,
+                coverage_note=coverage_note,
+            )
         except Exception as e:
             logger.error(f"Gagal melakukan generate_literature_review: {str(e)}")
-            return f"Error: {str(e)}"
+            return self._ensure_litreview_contract("")
 
     def polish_academic_tone(self, text: str, memory: Any = None) -> str:
         """
@@ -778,6 +896,17 @@ class WritingAgent:
                 return func(findings=input_data, memory=memory, **clean_params)
             elif tool_name == "format_citation":
                 return func(paper=input_data, memory=memory, **clean_params)
+            elif tool_name == "polish_academic_tone" and isinstance(input_data, dict):
+                review_text = str(input_data.get("review_text") or "")
+                polished_text = func(text=review_text, memory=memory, **clean_params)
+                return self._ensure_litreview_contract(
+                    {
+                        "review_text": polished_text,
+                        "references": input_data.get("references", []),
+                        "papers_used": input_data.get("papers_used", len(input_data.get("references", []))),
+                        "coverage_note": input_data.get("coverage_note", ""),
+                    }
+                )
             elif tool_name == "generate_full_chapter":
                 return func(text=str(input_data) if input_data is not None else "", memory=memory, **clean_params)
             elif tool_name == "refine_with_critique":

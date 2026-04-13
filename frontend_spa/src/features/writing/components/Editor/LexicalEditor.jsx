@@ -120,6 +120,8 @@ const EditorRefPlugin = ({ editorRef }) => {
                             if (node instanceof ThesisParagraphNode) {
                                 result.push({
                                     paraId: node.getParagraphId(),
+                                    nodeKey: node.getKey ? node.getKey() : node.__key,
+                                    target_key: node.getKey ? node.getKey() : node.__key,
                                     content: node.getTextContent(),
                                 });
                             }
@@ -175,6 +177,9 @@ const EditorRefPlugin = ({ editorRef }) => {
                         const wordCount = fullText.trim() ? fullText.trim().split(/\s+/).length : 0;
 
                         context = {
+                            paraId: blockNode instanceof ThesisParagraphNode ? blockNode.getParagraphId() : null,
+                            nodeKey: blockNode.getKey ? blockNode.getKey() : blockNode.__key,
+                            target_key: blockNode.getKey ? blockNode.getKey() : blockNode.__key,
                             paragraphText,
                             prevParagraph,
                             nextParagraph,

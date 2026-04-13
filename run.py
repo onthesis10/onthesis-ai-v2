@@ -2,6 +2,8 @@ from gevent import monkey
 monkey.patch_all(thread=False)
 import os
 import sys
+import errno
+import socket
 import logging
 import traceback
 from datetime import datetime
@@ -47,16 +49,42 @@ def _log_runtime_sources(app):
     except Exception:
         logger.exception("Failed to resolve /api/unified-search-references during startup")
 
+
+def _port_is_available(host, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            return False
+        raise
+    finally:
+        sock.close()
+    return True
+
 def main():
     try:
         # Load config
         debug_mode = os.getenv('FLASK_DEBUG', 'True') == 'True'
+        host = os.getenv('HOST', '0.0.0.0')
+        port = int(os.getenv('PORT', '5000'))
+
+        if not _port_is_available(host, port):
+            logger.error(
+                "Port %s sudah dipakai di %s. Biasanya masih ada server lama yang jalan. "
+                "Hentikan proses lama atau jalankan server baru dengan PORT berbeda, misalnya: "
+                "`PORT=5001 ./.venv/bin/python run.py`",
+                port,
+                host,
+            )
+            sys.exit(1)
+
         app = create_app()
         _log_runtime_sources(app)
         
         logger.info("==========================================")
         logger.info(f"OnThesis Server starting at {datetime.now()}")
-        logger.info(f"URL: http://127.0.0.1:5000")
+        logger.info(f"URL: http://127.0.0.1:{port}")
         logger.info(f"Debug Mode: {debug_mode}")
         logger.info("Note: GEVENT ENABLED for Windows WebSocket stability")
         logger.info("==========================================")
@@ -66,8 +94,8 @@ def main():
         socketio.run(
             app, 
             debug=debug_mode, 
-            host='0.0.0.0', 
-            port=5000,
+            host=host,
+            port=port,
             use_reloader=False, # Disable reloader for eventlet stability on Windows
             log_output=True
         )

@@ -307,7 +307,7 @@ export default function WritingStudioRoot() {
     const handleForceSave = useCallback(() => {
         const html = editorRef.current?.getHtml();
         if (html) {
-            saveContent(html);
+            saveContent(html, { mode: 'flush' });
             invalidateCache(); // Clear context cache on save
         }
     }, [saveContent]);

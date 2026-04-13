@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
+from . import citation_router
+
 # Configurasi logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -157,7 +159,7 @@ class TaskPlanner:
                 tool="generate_literature_review",
                 input_from="step_3",
                 output_to="step_5",
-                params={"style": "academic formal", "language": "id"},
+                params={"style": "academic formal", "language": "id", "min_papers": 5},
                 depends_on=["step_3"]
             ))
             
@@ -277,16 +279,8 @@ class TaskPlanner:
             ))
             steps = self._add_editor_replacement_step(steps, memory_context, "step_1")
             
-        elif intent == "citation_format":
-            steps.append(TaskStep(
-                step_id="step_1",
-                agent="writing_agent",
-                tool="format_citation",
-                input_from="user",
-                output_to="user",
-                params={"style": "APA"},  # Bisa di-override berdasarkan memori profile
-                depends_on=[]
-            ))
+        elif intent in citation_router.CITATION_LANE_MAP:
+            steps = self._plan_citation_intent(intent, user_input, memory_context)
             
         elif intent == "analyze_argument":
             steps.append(TaskStep(
@@ -555,9 +549,6 @@ class TaskPlanner:
         elif intent == "thesis_conclusion":
             steps = self._plan_thesis_conclusion(user_input, memory_context)
 
-        elif intent == "validate_citations":
-            steps = self._plan_validate_citations(user_input, memory_context)
-
         elif intent == "golden_thread_check":
             steps = self._plan_golden_thread(user_input, memory_context)
 
@@ -593,12 +584,16 @@ class TaskPlanner:
     def _add_editor_insertion_step(self, steps: List[TaskStep], memory_context: Optional[Dict], last_step_id: str) -> List[TaskStep]:
         """Menambahkan step untuk memasukkan hasil ke Lexical Editor jika ada paragraf aktif."""
         active_paras = []
+        active_node = {}
         if memory_context:
             active_paras = memory_context.get("active_paragraphs", [])
             if not active_paras:
                 req_ctx = memory_context.get("request_context", {})
                 active_paras = req_ctx.get("active_paragraphs", [])
-        target_para = active_paras[-1].get("paraId") if active_paras else ""
+                active_node = req_ctx.get("active_node", {}) if isinstance(req_ctx.get("active_node", {}), dict) else {}
+            else:
+                active_node = memory_context.get("active_node", {}) if isinstance(memory_context.get("active_node", {}), dict) else {}
+        target_para = active_node.get("paraId") or (active_paras[-1].get("paraId") if active_paras else "")
         
         if target_para:
             for step in steps:
@@ -623,12 +618,16 @@ class TaskPlanner:
     def _add_editor_replacement_step(self, steps: List[TaskStep], memory_context: Optional[Dict], last_step_id: str) -> List[TaskStep]:
         """Menambahkan step untuk mengganti isi paragraf aktif dengan hasil Lexical Editor."""
         active_paras = []
+        active_node = {}
         if memory_context:
             active_paras = memory_context.get("active_paragraphs", [])
             if not active_paras:
                 req_ctx = memory_context.get("request_context", {})
                 active_paras = req_ctx.get("active_paragraphs", [])
-        target_para = active_paras[-1].get("paraId") if active_paras else ""
+                active_node = req_ctx.get("active_node", {}) if isinstance(req_ctx.get("active_node", {}), dict) else {}
+            else:
+                active_node = memory_context.get("active_node", {}) if isinstance(memory_context.get("active_node", {}), dict) else {}
+        target_para = active_node.get("paraId") or (active_paras[-1].get("paraId") if active_paras else "")
         
         if target_para:
             for step in steps:
@@ -798,16 +797,31 @@ class TaskPlanner:
 
     def _plan_validate_citations(self, user_input: str, memory_context: Optional[Dict]) -> List[TaskStep]:
         """Plan for citation validation."""
-        # Gunakan input langsung dari user agar kutipan di dalam chat/prompt bisa terekstrak
+        return self._plan_citation_intent("validate_citations", user_input, memory_context)
+
+    def _plan_citation_intent(self, intent: str, user_input: str, memory_context: Optional[Dict]) -> List[TaskStep]:
+        """Plan a citation task using the centralized citation router."""
+        del user_input, memory_context
+
+        handler = citation_router.get_handler(intent)
+        handler_agent, handler_tool = handler.split(".", 1)
+        agent_name_map = {
+            "writing_agent": "writing_agent",
+            "chapter_skills": "chapter_skills_agent",
+            "diagnostic_agent": "diagnostic_agent",
+        }
+        agent_name = agent_name_map[handler_agent]
+        params = {"style": "APA"} if handler_tool == "format_citation" else {}
+
         return [
             TaskStep(
                 step_id="step_1",
-                agent="diagnostic_agent",
-                tool="verify_citations",
+                agent=agent_name,
+                tool=handler_tool,
                 input_from="user",
                 output_to="user",
-                params={},
-                depends_on=[]
+                params=params,
+                depends_on=[],
             ),
         ]
 
@@ -833,7 +847,7 @@ class TaskPlanner:
 
     def _plan_edit_thesis(self, user_input: str, memory_context: Optional[Dict]) -> List[TaskStep]:
         """Plan for editor-based thesis editing."""
-        return [
+        steps = [
             TaskStep(
                 step_id="step_1",
                 agent="editor_agent",
@@ -853,6 +867,7 @@ class TaskPlanner:
                 depends_on=["step_1"]
             ),
         ]
+        return self._add_editor_replacement_step(steps, memory_context, "step_2")
 
     # ═══════════════════════════════════════════════════════════
     # V2 DYNAMIC PLAN GENERATION (LLM Fallback)

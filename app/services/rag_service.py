@@ -103,7 +103,7 @@ class LiteContextEngine:
 
         return dot_product / (norm_a * norm_b)
 
-    def process_document(self, file_path: str, doc_id: str, user_id: str):
+    def process_document(self, file_path: str, doc_id: str, user_id: str, project_id: str = ""):
         """
         Membaca PDF, memecahnya jadi chunks, DAN menghitung vektornya.
         """
@@ -133,20 +133,32 @@ class LiteContextEngine:
                             "source": os.path.basename(file_path),
                             "doc_id": doc_id,
                             "user_id": user_id,
+                            "project_id": project_id,
                         }
                     )
 
-            storage_file = os.path.join(self.storage_path, f"{user_id}_{doc_id}.json")
+            file_key = f"{user_id}_{project_id}_{doc_id}.json" if project_id else f"{user_id}_{doc_id}.json"
+            storage_file = os.path.join(self.storage_path, file_key)
             with open(storage_file, "w", encoding="utf-8") as f:
                 json.dump(chunks, f)
 
-            return {"status": "success", "chunks_count": len(chunks)}
+            token_count = sum(len((chunk.get("content") or "").split()) for chunk in chunks)
+            summary_parts = [chunk.get("content", "")[:240] for chunk in chunks[:3] if chunk.get("content")]
+            context_summary = "\n\n".join(summary_parts)
+
+            return {
+                "status": "success",
+                "chunks_count": len(chunks),
+                "token_count": token_count,
+                "context_summary": context_summary,
+                "storage_file": storage_file,
+            }
 
         except Exception as e:
             logging.error(f"Error processing document: {e}")
             return {"status": "error", "message": str(e)}
 
-    def search_context(self, query: str, user_id: str, k: int = 4) -> List[Dict]:
+    def search_context(self, query: str, user_id: str, project_id: str = "", k: int = 4) -> List[Dict]:
         """
         Mencari potongan teks paling relevan menggunakan Semantic Search.
         """
@@ -160,7 +172,13 @@ class LiteContextEngine:
             for filename in user_files:
                 try:
                     with open(os.path.join(self.storage_path, filename), "r", encoding="utf-8") as f:
-                        all_chunks.extend(json.load(f))
+                        file_chunks = json.load(f)
+                        if project_id:
+                            file_chunks = [
+                                chunk for chunk in file_chunks
+                                if str(chunk.get("project_id") or "") == str(project_id)
+                            ]
+                        all_chunks.extend(file_chunks)
                 except Exception as load_err:
                     logging.error(f"Gagal load chunk {filename}: {load_err}")
                     continue
