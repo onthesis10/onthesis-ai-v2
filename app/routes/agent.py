@@ -139,6 +139,28 @@ def _build_history_session(project_id: str, turns: list[dict]) -> dict:
     }
 
 
+def _normalize_diff_payload(diff: dict) -> dict:
+    if not isinstance(diff, dict):
+        return {}
+
+    diff_id = diff.get("diff_id") or diff.get("diffId") or ""
+    old_text = diff.get("old_text")
+    if old_text is None:
+        old_text = diff.get("before", "")
+    new_text = diff.get("new_text")
+    if new_text is None:
+        new_text = diff.get("after", "")
+
+    normalized = dict(diff)
+    normalized["diffId"] = diff_id
+    normalized["diff_id"] = diff_id
+    normalized["old_text"] = old_text
+    normalized["new_text"] = new_text
+    normalized.setdefault("before", old_text)
+    normalized.setdefault("after", new_text)
+    return normalized
+
+
 def _should_precompute_pruned_context(task: str, context: dict) -> bool:
     task_lc = (task or "").strip().lower()
     if not task_lc:
@@ -189,7 +211,7 @@ def summarize_chapter():
                 model="groq/llama-3.1-8b-instant", # Use fast model for summaries
                 messages=[{"role": "user", "content": summary_prompt}],
                 max_tokens=250,
-                timeout=60, # 60s timeout for stability
+                timeout=15,
                 temperature=0.3
             )
             summary_text = response.choices[0].message.content.strip()
@@ -203,7 +225,7 @@ def summarize_chapter():
                 messages=[{"role": "user", "content": summary_prompt}],
                 api_key=fallback_api_key,
                 max_tokens=250,
-                timeout=60,
+                timeout=15,
                 temperature=0.3
             )
             summary_text = response.choices[0].message.content.strip()
@@ -428,7 +450,7 @@ def run_agent_sse():
                     if isinstance(result, dict) and result.get("diff"):
                         yield emit({
                             "type": "PENDING_DIFF",
-                            "diff": result["diff"],
+                            "diff": _normalize_diff_payload(result["diff"]),
                         })
                     if isinstance(result, dict):
                         for citation_flag in result.get("citation_flags", []):
@@ -514,6 +536,4 @@ def clear_agent_history(project_id):
     memory = SharedMemory(user_id, project_id, QdrantVectorDB(), FirestoreDocumentDB())
     memory.flush_session()
     return jsonify({"status": "success"}), 200
-
-
 

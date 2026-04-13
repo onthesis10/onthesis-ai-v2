@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 from typing import Dict, Any, Optional, Callable, List
 
 from .agent_registry import AgentRegistry
@@ -54,17 +55,6 @@ Always end your response with a brief note if there are next steps the user shou
 Example: "Langkah berikutnya: kamu bisa minta saya untuk expand bagian gap penelitian, atau langsung ke penulisan Bab 2."
 
 {memory_context}
-"""
-
-THESIS_TOOLS_SUPERVISOR_PROMPT = """
-Kamu adalah thesis agent yang membantu user menulis tesis.
-Gunakan tools yang tersedia untuk membaca, mengedit, dan mencari referensi.
-Fokus pada konteks chapter aktif dan referensi proyek.
-
-PENTING UNTUK TOOL CALLING: 
-Pastikan semua parameter angka (seperti 'limit' pada pencarian) dikirim sebagai INTEGER murni tanpa tanda kutip (contoh: 5, bukan "5").
-
-Setelah selesai, berikan ringkasan perubahan secara singkat.
 """
 
 MEMORY_CONTEXT_INJECTOR_TEMPLATE = """
@@ -171,6 +161,25 @@ class SupervisorAgent:
 
         return str(raw_output or "")
 
+    def _build_edit_pipeline_failure_response(self, error: Exception, context: Optional[Dict[str, Any]]) -> str:
+        """
+        Best-effort response when the edit pipeline cannot safely complete.
+        """
+        logger.error("Edit pipeline failed: %s", error)
+
+        has_editor_context = bool((context or {}).get("active_paragraphs"))
+        if has_editor_context:
+            return (
+                "Saya belum berhasil menjalankan revisi editor lewat pipeline baru untuk permintaan ini. "
+                "Tidak ada perubahan yang diterapkan ke editor. Coba gunakan instruksi yang lebih spesifik "
+                "seperti rewrite atau paraphrase paragraf aktif."
+            )
+
+        return (
+            "Saya belum berhasil memproses permintaan edit ini lewat pipeline baru. "
+            "Tidak ada perubahan yang diterapkan. Coba ulangi dengan konteks editor yang aktif atau instruksi yang lebih spesifik."
+        )
+
     def _record_exchange(
         self,
         memory: SharedMemory,
@@ -193,6 +202,55 @@ class SupervisorAgent:
             intent=intent,
             plan_id=plan_id,
         )
+
+    def _record_user_turn(
+        self,
+        memory: SharedMemory,
+        user_message: str,
+        intent: str,
+        plan_id: Optional[str] = None,
+    ) -> None:
+        if not memory or not hasattr(memory, "conversation"):
+            return
+        memory.conversation.add_turn(
+            role="user",
+            content=user_message,
+            intent=intent,
+            plan_id=plan_id,
+        )
+
+    def _record_planned_exchange(
+        self,
+        executor: Any,
+        memory: SharedMemory,
+        user_message: str,
+        intent: str,
+        assistant_message: str,
+        plan: Optional[TaskPlan],
+    ) -> None:
+        """
+        Simpan user turn terpisah, lalu delegasikan commit assistant turn + plan
+        ke executor agar tidak terjadi double write.
+        """
+        plan_id = getattr(plan, "plan_id", getattr(plan, "id", None)) if plan else None
+        self._record_user_turn(memory, user_message, intent, plan_id=plan_id)
+
+        if not memory or not hasattr(memory, "conversation") or not plan:
+            return
+
+        conversation = memory.conversation
+        if executor and hasattr(executor, "_commit_plan_result"):
+            executor._commit_plan_result(conversation, plan, assistant_message)
+            if getattr(executor, "plan_result_commit_attempted", False):
+                return
+
+        try:
+            if hasattr(conversation, "add_plan"):
+                conversation.add_plan(plan, assistant_message)
+            else:
+                raise AttributeError("Conversation object does not support atomic add_plan(plan, result)")
+        except Exception as commit_error:
+            logger.error(f"Fallback planned exchange commit failed: {commit_error}")
 
     def _synthesize_final_response(self, raw_output: str, context: str) -> str:
         """
@@ -302,116 +360,6 @@ class SupervisorAgent:
         ]
         return any(k in msg for k in keywords)
 
-    def _run_thesis_tools_loop(
-        self,
-        user_message: str,
-        context: Dict[str, Any],
-        on_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
-    ) -> str:
-        import litellm
-        from litellm.exceptions import RateLimitError
-        from app.services.thesis_tools import ALL_THESIS_TOOLS
-
-        model = context.get("_llm_model", os.environ.get("SUPERVISOR_AGENT_MODEL", "groq/llama-3.3-70b-versatile"))
-        api_key = os.environ.get("GROQ_API_KEY") or os.environ.get("LLM_API_KEY")
-        fallback_model = "gemini/gemini-2.5-flash"
-        fallback_api_key = os.environ.get("GEMINI_API_KEY")
-
-        # Inject paragraph context into the prompt so the LLM knows the paraIds
-        active_paragraphs = context.get("active_paragraphs", [])
-        para_context = "\n".join([f"[{p.get('paraId')}] {p.get('content')}" for p in active_paragraphs]) if active_paragraphs else "Tidak ada paragraf aktif."
-        
-        dynamic_system_prompt = THESIS_TOOLS_SUPERVISOR_PROMPT + f"\n\nDAFTAR PARAGRAF AKTIF SAAT INI (dengan paraId):\n{para_context}\nGunakan ID paragraf di atas untuk melakukan editing, JANGAN berhalusinasi (misal jangan gunakan 'P-abc123')."
-
-        thesis_agent = self.registry.get_agent("thesis_tools_agent")
-        conversation: List[Dict[str, Any]] = [{"role": "user", "content": user_message}]
-        collected_text: List[str] = []
-
-        for _ in range(4):
-            try:
-                response = litellm.completion(
-                    model=model,
-                    messages=[{"role": "system", "content": dynamic_system_prompt}] + conversation,
-                    tools=ALL_THESIS_TOOLS,
-                    tool_choice="auto",
-                    max_tokens=2048,
-                    temperature=0.3,
-                    timeout=60,
-                    api_key=api_key,
-                )
-            except RateLimitError:
-                if not fallback_api_key:
-                    raise
-                response = litellm.completion(
-                    model=fallback_model,
-                    messages=[{"role": "system", "content": dynamic_system_prompt}] + conversation,
-                    tools=ALL_THESIS_TOOLS,
-                    tool_choice="auto",
-                    max_tokens=2048,
-                    temperature=0.3,
-                    timeout=60,
-                    api_key=fallback_api_key,
-                )
-
-            choice = response.choices[0]
-            message = choice.message
-
-            if message.content:
-                collected_text.append(message.content)
-                self._emit(on_event, "TEXT_DELTA", {"delta": message.content})
-
-            tool_calls = getattr(message, "tool_calls", []) or []
-            if not tool_calls or choice.finish_reason == "stop":
-                break
-
-            assistant_msg: Dict[str, Any] = {"role": "assistant", "content": message.content or ""}
-            assistant_msg["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in tool_calls
-            ]
-            conversation.append(assistant_msg)
-
-            for tc in tool_calls:
-                tool_name = tc.function.name
-                tool_call_id = tc.id
-                try:
-                    tool_args = json.loads(tc.function.arguments or "{}")
-                except json.JSONDecodeError:
-                    tool_args = {}
-
-                self._emit(on_event, "TOOL_CALL", {
-                    "id": tool_call_id,
-                    "tool": tool_name,
-                    "args": tool_args,
-                })
-
-                result = thesis_agent.run_tool(
-                    tool_name=tool_name,
-                    input_data=tool_args,
-                    params={},
-                    context=context,
-                )
-                self._emit(on_event, "TOOL_RESULT", {
-                    "id": tool_call_id,
-                    "tool": tool_name,
-                    "result": result,
-                })
-
-                conversation.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": json.dumps(result, ensure_ascii=False),
-                })
-
-        return "\n".join([part for part in collected_text if part]).strip()
-
     def _emit(self, on_event: Optional[Callable[[str, Dict[str, Any]], None]], event_type: str, data: Dict[str, Any]):
         if not on_event:
             return
@@ -471,6 +419,273 @@ class SupervisorAgent:
             known_papers_summary='Belum ada paper yang diambil pada fast-path ini.',
         )
 
+    def _resolve_runtime_mode(self, context: Optional[Dict[str, Any]]) -> str:
+        req_ctx = context or {}
+        raw_mode = (
+            req_ctx.get("_mode")
+            or req_ctx.get("requestedTask")
+            or req_ctx.get("mode")
+            or "writing"
+        )
+        return str(raw_mode).strip().lower()
+
+    def _extract_primary_text(self, user_message: str, context: Optional[Dict[str, Any]]) -> str:
+        req_ctx = context or {}
+        active_paragraphs = req_ctx.get("active_paragraphs") or []
+        paragraph_texts = []
+        for paragraph in active_paragraphs:
+            if isinstance(paragraph, dict):
+                content = str(paragraph.get("content", "")).strip()
+                if content:
+                    paragraph_texts.append(content)
+        if paragraph_texts:
+            return "\n\n".join(paragraph_texts)
+        references_text = str(req_ctx.get("references_text", "")).strip()
+        if references_text:
+            return references_text
+        return str(user_message or "").strip()
+
+    def _extract_json_payload(self, raw_text: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(raw_text, dict):
+            return raw_text
+        if not isinstance(raw_text, str):
+            return None
+        cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw_text).strip()
+        if not cleaned:
+            return None
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+
+    def _call_supervisor_llm(self, user_prompt: str, context: str, temperature: float = 0.3) -> str:
+        if not self.api_key:
+            return ""
+
+        import litellm
+
+        fallback_api_key = os.environ.get("GEMINI_API_KEY")
+        fallback_model = "gemini/gemini-2.5-flash"
+        sys_prompt = SUPERVISOR_SYSTEM_PROMPT.replace("{memory_context}", context)
+
+        try:
+            response = litellm.completion(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                api_key=self.api_key,
+                temperature=temperature,
+            )
+            return response.choices[0].message.content
+        except Exception as primary_error:
+            logger.warning(f"Supervisor special-mode primary failed, fallback to {fallback_model}: {primary_error}")
+            if not fallback_api_key:
+                return ""
+            try:
+                response = litellm.completion(
+                    model=fallback_model,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    api_key=fallback_api_key,
+                    temperature=temperature,
+                )
+                return response.choices[0].message.content
+            except Exception as fallback_error:
+                logger.warning(f"Supervisor special-mode fallback failed: {fallback_error}")
+                return ""
+
+    def _format_critique_response(
+        self,
+        score_data: Optional[Dict[str, Any]],
+        coherence_data: Optional[Dict[str, Any]],
+        citation_data: Optional[Dict[str, Any]],
+        golden_thread_data: Optional[Dict[str, Any]],
+        llm_summary: str = "",
+    ) -> str:
+        lines: List[str] = ["**Critique Akademik**"]
+
+        scores = (score_data or {}).get("scores", {}) if isinstance(score_data, dict) else {}
+        overall = (score_data or {}).get("overall")
+        strengths = list((score_data or {}).get("strengths", []) or [])
+        improvements = list((score_data or {}).get("improvements", []) or [])
+
+        if scores:
+            score_parts = []
+            for key in ("clarity", "argument", "academic_tone", "structure", "originality"):
+                if key in scores:
+                    score_parts.append(f"{key}={scores[key]}")
+            if score_parts:
+                overall_suffix = f", overall={overall}" if overall is not None else ""
+                lines.append("Skor: " + ", ".join(score_parts) + overall_suffix)
+
+        if strengths:
+            lines.append("Kekuatan utama: " + "; ".join(str(strength) for strength in strengths[:3]))
+
+        if improvements:
+            lines.append("Prioritas revisi: " + "; ".join(str(item) for item in improvements[:4]))
+
+        transitions = (coherence_data or {}).get("transitions", []) if isinstance(coherence_data, dict) else []
+        transition_issues = [
+            str(item.get("issue", "")).strip()
+            for item in transitions
+            if isinstance(item, dict) and str(item.get("issue", "")).strip()
+        ]
+        if transition_issues:
+            lines.append("Isu struktur: " + "; ".join(transition_issues[:3]))
+
+        if isinstance(citation_data, dict) and citation_data.get("claims_without_citation"):
+            lines.append(
+                f"Temuan sitasi: {citation_data.get('claims_without_citation')} klaim masih membutuhkan referensi tambahan."
+            )
+
+        if isinstance(golden_thread_data, dict) and golden_thread_data.get("coherent") is False:
+            warnings = golden_thread_data.get("warnings", []) or []
+            if warnings:
+                warning_text = "; ".join(str(warning.get("issue", warning)) for warning in warnings[:3])
+                lines.append("Benang merah: " + warning_text)
+
+        if llm_summary:
+            lines.append("")
+            lines.append(llm_summary.strip())
+
+        if len(lines) == 1:
+            lines.append("Belum ada temuan spesifik yang bisa dipastikan dari validator. Coba beri potongan teks atau paragraf aktif yang lebih jelas.")
+
+        lines.append("")
+        lines.append("Langkah berikutnya: jika mau, saya bisa ubah critique ini langsung menjadi revisi paragraf yang lebih kuat.")
+        return "\n".join(lines)
+
+    def _run_special_mode(
+        self,
+        mode: str,
+        memory: SharedMemory,
+        user_message: str,
+        agent_context: Dict[str, Any],
+    ) -> str:
+        req_ctx = getattr(memory, "request_context", {}) or {}
+        formatted_context = self._format_memory_context(agent_context)
+        source_text = self._extract_primary_text(user_message, req_ctx)
+        active_paragraphs = req_ctx.get("active_paragraphs") or []
+        registry_getter = getattr(self.registry, "get_agent", None)
+        analysis_agent = registry_getter("analysis_agent") if callable(registry_getter) else None
+        diagnostic_agent = registry_getter("diagnostic_agent") if callable(registry_getter) else None
+
+        if mode == "critique":
+            score_data = None
+            coherence_data = None
+            citation_data = None
+            golden_thread_data = None
+
+            if analysis_agent and source_text:
+                score_data = self._extract_json_payload(
+                    analysis_agent.score_thesis_quality(source_text, memory=memory)
+                )
+                coherence_data = self._extract_json_payload(
+                    analysis_agent.check_coherence(source_text, memory=memory)
+                )
+
+            if diagnostic_agent and source_text:
+                paragraph_input = active_paragraphs if active_paragraphs else source_text
+                with_citation_memory = diagnostic_agent.analyze_for_missing_citations(
+                    paragraph_input,
+                    memory=memory,
+                )
+                if isinstance(with_citation_memory, dict):
+                    citation_data = with_citation_memory
+
+                golden_thread = req_ctx.get("golden_thread", {}) if isinstance(req_ctx.get("golden_thread", {}), dict) else {}
+                if golden_thread or req_ctx.get("context_problem"):
+                    golden_thread_data = diagnostic_agent.check_golden_thread(
+                        bab1_rq=golden_thread.get("researchQuestion", req_ctx.get("context_problem", "")),
+                        bab4_findings=golden_thread.get("findings", source_text),
+                        bab5_conclusion=golden_thread.get("conclusion", source_text),
+                        memory=memory,
+                    )
+
+            llm_summary = self._call_supervisor_llm(
+                (
+                    "Berikan kritik akademik yang tajam namun konstruktif untuk materi berikut. "
+                    "Fokus pada logika argumen, kualitas akademik, struktur, dan prioritas revisi. "
+                    "Jawab ringkas dalam Bahasa Indonesia.\n\n"
+                    f"MATERI:\n{source_text}"
+                ),
+                formatted_context,
+                temperature=0.2,
+            )
+            return self._format_critique_response(
+                score_data=score_data,
+                coherence_data=coherence_data,
+                citation_data=citation_data,
+                golden_thread_data=golden_thread_data,
+                llm_summary=llm_summary,
+            )
+
+        if mode == "concept_map":
+            prompt = (
+                "Buat peta konsep tekstual dari materi berikut. "
+                "Gunakan format node dan relasi yang mudah dibaca, tunjukkan hubungan sebab-akibat atau hierarki konsep, "
+                "dan tutup dengan 2-3 insight tentang gap atau koneksi yang paling penting.\n\n"
+                f"MATERI:\n{source_text}"
+            )
+            response = self._call_supervisor_llm(prompt, formatted_context, temperature=0.2)
+            if response:
+                return response
+            return (
+                "**Concept Map**\n"
+                f"- Topik inti: {req_ctx.get('context_title') or 'Tesis aktif'}\n"
+                f"- Masalah utama: {req_ctx.get('context_problem') or 'Belum terdefinisi'}\n"
+                f"- Materi sumber: {source_text[:500]}\n\n"
+                "Langkah berikutnya: saya bisa ubah peta konsep ini menjadi outline Bab 2 atau kerangka presentasi."
+            )
+
+        if mode == "mind_map":
+            prompt = (
+                "Buat mind map tekstual yang ringkas dan hierarkis dari materi berikut. "
+                "Gunakan struktur bullet tree yang rapi: ide pusat -> cabang utama -> detail penting. "
+                "Tutup dengan saran cabang yang masih kurang.\n\n"
+                f"MATERI:\n{source_text}"
+            )
+            response = self._call_supervisor_llm(prompt, formatted_context, temperature=0.25)
+            if response:
+                return response
+            return (
+                "**Mind Map**\n"
+                f"- Ide pusat: {req_ctx.get('context_title') or 'Topik penelitian'}\n"
+                f"- Cabang 1: {req_ctx.get('context_problem') or 'Rumusan masalah'}\n"
+                f"- Cabang 2: {req_ctx.get('context_method') or 'Metodologi'}\n"
+                f"- Cabang 3: {source_text[:280]}\n\n"
+                "Langkah berikutnya: saya bisa turunkan mind map ini menjadi subbab atau daftar slide."
+            )
+
+        if mode == "sidang_simulation":
+            prompt = (
+                "Simulasikan mini sidang skripsi berdasarkan konteks berikut. "
+                "Berikan 3 pertanyaan penguji yang realistis dan menantang, lalu untuk masing-masing sertakan jawaban ideal singkat "
+                "serta satu follow-up risk yang perlu diwaspadai mahasiswa. "
+                "Jawab dalam Bahasa Indonesia.\n\n"
+                f"MATERI:\n{source_text}"
+            )
+            response = self._call_supervisor_llm(prompt, formatted_context, temperature=0.45)
+            if response:
+                return response
+            return (
+                "**Simulasi Sidang Singkat**\n"
+                "1. Apa urgensi utama penelitian ini?\n"
+                "Jawaban ideal: jelaskan gap penelitian, dampak praktis, dan alasan metodologi dipilih.\n"
+                "2. Mengapa metode yang dipakai paling tepat?\n"
+                "Jawaban ideal: hubungkan desain riset dengan karakter data dan tujuan penelitian.\n"
+                "3. Apa kontribusi temuan terhadap rumusan masalah?\n"
+                "Jawaban ideal: jawab tiap rumusan masalah secara eksplisit dan konsisten.\n\n"
+                "Langkah berikutnya: saya bisa lanjutkan dengan sesi tanya-jawab sidang yang lebih agresif per peran penguji."
+            )
+
+        return ""
+
     def process_request(
         self,
         user_id: str,
@@ -527,6 +742,22 @@ class SupervisorAgent:
                 memory_history = agent_context.get("conversation_history", [])
                 agent_context["conversation_history"] = (memory_history + merged_history)[-6:]
         formatted_context_str = self._format_memory_context(agent_context)
+        runtime_mode = self._resolve_runtime_mode(context)
+
+        if runtime_mode in {"critique", "concept_map", "mind_map", "sidang_simulation"}:
+            mode_labels = {
+                "critique": "Menganalisis kritik akademik...",
+                "concept_map": "Menyusun concept map...",
+                "mind_map": "Menyusun mind map...",
+                "sidang_simulation": "Menyiapkan simulasi sidang...",
+            }
+            self._emit(on_event, "STEP", {"step": "planning", "message": mode_labels.get(runtime_mode, "Memproses mode khusus...")})
+            special_response = self._run_special_mode(runtime_mode, memory, message, agent_context)
+            if not special_response.strip():
+                special_response = "Mode khusus ini belum menghasilkan output. Coba kirim konteks atau materi yang lebih spesifik."
+            self._record_exchange(memory, message, runtime_mode, special_response)
+            self._emit(on_event, "TEXT_DELTA", {"delta": special_response})
+            return special_response
         
         # 3. Intent Classification
         histori = agent_context.get("conversation_history", [])
@@ -567,8 +798,6 @@ class SupervisorAgent:
         logger.info(f"Terkonfirmasi Intent => {intent} (Confidence: {intent_res.get('confidence', 0):.2f})")
 
         if intent == "edit_thesis":
-            # Sekarang edit_thesis ikut pipeline standard (plan→execute)
-            # _run_thesis_tools_loop() hanya sebagai fallback terakhir
             logger.info("Intent edit_thesis → routing melalui TaskPlanner pipeline")
             self._emit(on_event, "STEP", {"step": "planning", "message": "Menyusun rencana editing..."})
             try:
@@ -579,23 +808,16 @@ class SupervisorAgent:
                     raw_output = executor.execute(plan)
                     self._emit(on_event, "STEP", {"step": "reviewing", "message": "Menyajikan teks hasil editan..."})
                     final_answer = self._humanize_final_output(raw_output)
-                    self._record_exchange(memory, message, intent, str(final_answer), plan_id=plan.plan_id)
+                    self._record_planned_exchange(executor, memory, message, intent, str(final_answer), plan)
                     self._emit(on_event, "TEXT_DELTA", {"delta": str(final_answer)})
                     return final_answer
                 else:
-                    raise ValueError("Plan edit_thesis kosong, fallback ke thesis tools")
+                    raise ValueError("Plan edit_thesis kosong")
             except Exception as plan_err:
-                logger.warning(
-                    "TaskPlanner gagal untuk edit_thesis, fallback legacy thesis_tools_loop dipakai sementara: %s",
-                    plan_err,
-                )
-                self._emit(on_event, "STEP", {"step": "executing", "message": "Menjalankan thesis tools..."})
-                thesis_text = self._run_thesis_tools_loop(message, context or {}, on_event=on_event)
-                if not thesis_text:
-                    thesis_text = "Perintah selesai diproses melalui thesis tools."
-                self._record_exchange(memory, message, intent, thesis_text)
-                self._emit(on_event, "TEXT_DELTA", {"delta": thesis_text})
-                return thesis_text
+                pipeline_failure = self._build_edit_pipeline_failure_response(plan_err, context)
+                self._record_exchange(memory, message, intent, pipeline_failure)
+                self._emit(on_event, "TEXT_DELTA", {"delta": pipeline_failure})
+                return pipeline_failure
         
         # 4. Filter obrolan general bypass (Opsional, Planner menyediakan fallback logic)
         # Akan dihandle planner kalau general question masuk plan generator
@@ -631,26 +853,38 @@ class SupervisorAgent:
             self._emit(on_event, "STEP", {"step": "reviewing", "message": "Menyajikan hasil akhir..."})
             
             if intent == "validate_citations" and isinstance(raw_output, dict):
-                citations = raw_output.get("citations", [])
-                if not citations:
-                    final_answer = "Tidak ada sitasi yang berhasil diverifikasi."
+                uncited_sentences = raw_output.get("uncited_sentences", [])
+                total_sentences = int(raw_output.get("total_sentences") or 0)
+                coverage_ratio = float(raw_output.get("coverage_ratio") or 0.0)
+                if not raw_output.get("has_uncited_claims"):
+                    final_answer = (
+                        f"Semua kalimat yang terdeteksi tampak sudah memiliki sitasi. "
+                        f"Cakupan sitasi: {coverage_ratio:.0%} dari {total_sentences} kalimat."
+                    )
                 else:
-                    lines = ["**Hasil Verifikasi Sitasi:**\n"]
-                    for i, c in enumerate(citations, 1):
-                        status = c.get('status', 'ERROR')
-                        emoji = "✅" if status == "PLAUSIBLE" else ("⚠️" if status == "SUSPICIOUS" else "❌")
-                        reason = str(c.get('reason', '')).replace('\n', ' ')
-                        cite_context = str(c.get('context', '')).replace('\n', ' ')
-                        lines.append(f"{i}. **{c.get('author')} ({c.get('year')})** {emoji} `{status}`\n   > *Alasan:* {reason}\n   > *Konteks:* \"{cite_context}\"\n")
+                    lines = [
+                        "**Hasil Validasi Sitasi:**",
+                        f"Ditemukan {len(uncited_sentences)} kalimat yang masih membutuhkan sitasi dari total {total_sentences} kalimat.",
+                        f"Cakupan sitasi saat ini: {coverage_ratio:.0%}.",
+                        "",
+                    ]
+                    for i, item in enumerate(uncited_sentences, 1):
+                        suggestion = str(item.get("suggestion", "")).strip()
+                        position = item.get("position", -1)
+                        position_label = f"Kalimat #{position + 1}" if isinstance(position, int) and position >= 0 else "Posisi tidak terdeteksi"
+                        line = f"{i}. {position_label}: \"{item.get('sentence', '')}\""
+                        if suggestion:
+                            line += f"\n   Saran: {suggestion}"
+                        lines.append(line)
                     final_answer = "\n".join(lines)
             else:
                 final_answer = self._humanize_final_output(raw_output)
-            self._record_exchange(memory, message, intent, str(final_answer), plan_id=plan.plan_id)
+            self._record_planned_exchange(executor, memory, message, intent, str(final_answer), plan)
             self._emit(on_event, "TEXT_DELTA", {"delta": str(final_answer)})
             return str(final_answer)
         else:
             self._emit(on_event, "STEP", {"step": "reviewing", "message": "Menyusun jawaban akhir..."})
             final_answer = self._synthesize_final_response(raw_output, formatted_context_str)
-            self._record_exchange(memory, message, intent, final_answer, plan_id=plan.plan_id)
+            self._record_planned_exchange(executor, memory, message, intent, final_answer, plan)
             self._emit(on_event, "TEXT_DELTA", {"delta": final_answer})
             return final_answer

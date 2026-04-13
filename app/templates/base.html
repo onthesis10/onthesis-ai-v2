@@ -103,7 +103,7 @@
                         <div x-show="open" x-transition.opacity x-cloak
                              class="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-50">
                             
-                            <a href="{{ url_for('assistant.writing_assistant') }}" class="flex items-center gap-3 px-4 py-2 hover:bg-blue-50 dark:hover:bg-gray-700/50">
+                            <a href="{{ url_for('main.writing') }}" class="flex items-center gap-3 px-4 py-2 hover:bg-blue-50 dark:hover:bg-gray-700/50">
                                 <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><i data-lucide="pen-tool" class="w-4 h-4"></i></div>
                                 <div><p class="text-sm font-bold">Writing Studio</p><p class="text-[10px] text-gray-500">Editor Utama</p></div>
                             </a>
@@ -219,7 +219,7 @@
                 <a href="{{ url_for('main.projects') }}" class="block px-4 py-2 rounded-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-700">Proyek</a>
                 <div class="border-t border-gray-100 dark:border-gray-700 my-2"></div>
                 <p class="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Writing Tools</p>
-                <a href="{{ url_for('assistant.writing_assistant') }}" class="block px-4 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Writing Studio</a>
+                <a href="{{ url_for('main.writing') }}" class="block px-4 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Writing Studio</a>
                 <a href="{{ url_for('assistant.generator_kajian_teori') }}" class="block px-4 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Kajian Teori</a>
                 <a href="{{ url_for('main.paraphrase_ai') }}" class="block px-4 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Parafrase</a>
                 <div class="border-t border-gray-100 dark:border-gray-700 my-2"></div>

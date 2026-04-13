@@ -10,6 +10,8 @@ Provides tools for directly interacting with the Lexical Editor:
 
 Each suggest_* tool returns a dict with a 'diff' key that the SSE pipeline
 in agent.py automatically converts to a PENDING_DIFF event for the frontend.
+The diff payload uses old_text/new_text with temporary before/after aliases
+for backward compatibility.
 """
 
 import time
@@ -117,13 +119,20 @@ class EditorAgent:
             return {"error": "target_paragraph_id and new_markdown are required"}
 
         # Cari konten lama dari context
-        before = ""
+        old_text = ""
+        target_key = None
         if memory and hasattr(memory, "request_context"):
-            paragraphs = memory.request_context.get("active_paragraphs", [])
+            request_context = memory.request_context
+            paragraphs = request_context.get("active_paragraphs", [])
             for p in paragraphs:
                 if p.get("paraId") == target_paragraph_id:
-                    before = p.get("content", "")
+                    old_text = p.get("content", "")
+                    target_key = p.get("nodeKey") or p.get("target_key")
                     break
+            active_node = request_context.get("active_node", {})
+            if isinstance(active_node, dict) and active_node.get("paraId") == target_paragraph_id:
+                target_key = active_node.get("target_key") or active_node.get("nodeKey") or target_key
+                old_text = active_node.get("paragraphText") or old_text
 
         diff_id = f"diff_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
 
@@ -131,9 +140,13 @@ class EditorAgent:
             "success": True,
             "diff": {
                 "diffId": diff_id,
+                "diff_id": diff_id,
                 "type": "edit",
                 "paraId": target_paragraph_id,
-                "before": before,
+                "target_key": target_key,
+                "old_text": old_text,
+                "new_text": new_markdown,
+                "before": old_text,
                 "after": new_markdown,
                 "reason": reason,
             },
@@ -171,10 +184,14 @@ class EditorAgent:
             "success": True,
             "diff": {
                 "diffId": diff_id,
+                "diff_id": diff_id,
                 "type": "insert",
                 "paraId": new_para_id,
                 "anchorId": target_paragraph_id,
                 "position": position,
+                "old_text": "",
+                "new_text": new_markdown,
+                "before": "",
                 "after": new_markdown,
                 "reason": reason,
             },
@@ -202,13 +219,20 @@ class EditorAgent:
         if not target_paragraph_id:
             return {"error": "target_paragraph_id is required"}
 
-        before = ""
+        old_text = ""
+        target_key = None
         if memory and hasattr(memory, "request_context"):
-            paragraphs = memory.request_context.get("active_paragraphs", [])
+            request_context = memory.request_context
+            paragraphs = request_context.get("active_paragraphs", [])
             for p in paragraphs:
                 if p.get("paraId") == target_paragraph_id:
-                    before = p.get("content", "")
+                    old_text = p.get("content", "")
+                    target_key = p.get("nodeKey") or p.get("target_key")
                     break
+            active_node = request_context.get("active_node", {})
+            if isinstance(active_node, dict) and active_node.get("paraId") == target_paragraph_id:
+                target_key = active_node.get("target_key") or active_node.get("nodeKey") or target_key
+                old_text = active_node.get("paragraphText") or old_text
 
         diff_id = f"diff_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
 
@@ -216,9 +240,14 @@ class EditorAgent:
             "success": True,
             "diff": {
                 "diffId": diff_id,
+                "diff_id": diff_id,
                 "type": "delete",
                 "paraId": target_paragraph_id,
-                "before": before,
+                "target_key": target_key,
+                "old_text": old_text,
+                "new_text": "",
+                "before": old_text,
+                "after": "",
                 "reason": reason,
             },
         }

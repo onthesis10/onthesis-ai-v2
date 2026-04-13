@@ -31,32 +31,61 @@ export function OrchestratorChat({ projectId, projectData }) {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/orchestrator/execute', {
+      const taskPrefix = {
+        writing: 'Bantu pengerjaan penulisan akademik berikut.',
+        critique: 'Lakukan kritik akademik yang tajam namun konstruktif terhadap materi berikut.',
+        concept_map: 'Bangun peta konsep tekstual dari materi berikut.',
+        mind_map: 'Bangun mind map tekstual yang ringkas dari materi berikut.',
+        sidang_simulation: 'Simulasikan respons sidang skripsi untuk konteks berikut.',
+      };
+
+      const response = await fetch('/api/agent/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode,
-          message: input,
           projectId,
-          context,
+          chapterId: '',
+          mode,
+          task: `${taskPrefix[mode] || taskPrefix.writing}\n\n${input}`,
+          context: {
+            ...context,
+            requestedTask: mode,
+          },
         }),
       });
 
       if (!response.ok) throw new Error('Failed to execute orchestrator');
+      if (!response.body) throw new Error('Missing SSE stream');
 
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await response.json();
-        setMessages((prev) => [...prev, { role: 'assistant', content: JSON.stringify(data, null, 2) }]);
-      } else {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let bot = '';
-        setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          bot += decoder.decode(value);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let bot = '';
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const rawEvent of events) {
+          const trimmed = rawEvent.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.replace(/^data:\s*/, '');
+          if (!payload || payload === '[DONE]') continue;
+
+          const event = JSON.parse(payload);
+          if (event.type === 'TEXT_DELTA') {
+            bot += event.delta || '';
+          } else if (event.type === 'PENDING_DIFF') {
+            bot += `\n\n[Pending diff]\n${event.diff?.new_text || event.diff?.after || ''}`;
+          } else if (event.type === 'ERROR') {
+            throw new Error(event.message || 'Agent runtime failed');
+          }
+
           setMessages((prev) => {
             const draft = [...prev];
             draft[draft.length - 1] = { role: 'assistant', content: bot };

@@ -252,7 +252,7 @@
                 this.outputText = '';
 
                 try {
-                    // Pastikan endpoint sesuai dengan log server kamu (/paraphrase atau /api/paraphrase)
+                    // Gunakan runtime agent baru melalui /api/agent/run bila halaman ini diaktifkan kembali.
                     // Berdasarkan log error kamu: "POST /paraphrase HTTP/1.1" 200
                     const response = await fetch('/paraphrase', {  
                         method: 'POST',

@@ -384,7 +384,7 @@ document.addEventListener('alpine:init', () => {
             return res;
         },
 
-        goToProject(id) { window.location.href = `/writing-assistant?project_id=${id}`; },
+        goToProject(id) { window.location.href = `/writing?id=${id}`; },
 
         openModal(project = null) {
             this.isEdit = !!project; this.showModal = true;

@@ -1,17 +1,4 @@
-import { db, auth } from '@/lib/firebase';
-import {
-    collection,
-    addDoc,
-    deleteDoc,
-    doc,
-    query,
-    where,
-    onSnapshot,
-    writeBatch,
-    orderBy,
-    serverTimestamp,
-    DocumentData
-} from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 
 export interface Project {
     id: string;
@@ -40,150 +27,131 @@ export interface Citation {
     createdAt: any;
 }
 
-const COLLECTIONS = {
-    PROJECTS: 'projects',
-    CITATIONS: 'citations'
+const POLL_INTERVAL_MS = 15000;
+
+const toMillis = (value: any) => {
+    if (!value) return 0;
+    if (typeof value === 'string') {
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    if (typeof value === 'number') return value;
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    return 0;
+};
+
+const fetchJson = async (input: string, init?: RequestInit) => {
+    const response = await fetch(input, {
+        headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+        ...init,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || 'Request failed');
+    }
+    return payload;
+};
+
+const startBackendSubscription = <T>(
+    endpoint: string,
+    extractor: (payload: any) => T[],
+    callback: (items: T[]) => void,
+) => {
+    let intervalId: number | null = null;
+
+    const stopPolling = () => {
+        if (intervalId !== null) {
+            window.clearInterval(intervalId);
+            intervalId = null;
+        }
+    };
+
+    const run = async () => {
+        try {
+            const payload = await fetchJson(endpoint, { method: 'GET' });
+            callback(extractor(payload));
+        } catch (error) {
+            console.error(`Failed to fetch ${endpoint}:`, error);
+            callback([]);
+        }
+    };
+
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+        stopPolling();
+
+        if (!user) {
+            callback([]);
+            return;
+        }
+
+        void run();
+        intervalId = window.setInterval(() => {
+            void run();
+        }, POLL_INTERVAL_MS);
+    });
+
+    return () => {
+        stopPolling();
+        unsubscribeAuth();
+    };
 };
 
 export const citationService = {
-    // Projects
     subscribeToProjects: (callback: (projects: Project[]) => void) => {
-        // Return unsubscribe function
-        let unsubscribeSnapshot: (() => void) | undefined;
-
-        const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-
-            if (!user) {
-                callback([]);
-                return;
-            }
-
-            const q = query(
-                collection(db, COLLECTIONS.PROJECTS),
-                where('userId', '==', user.uid)
-            );
-
-            unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-                const projects = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })) as Project[];
-
-                projects.sort((a, b) => {
-                    const dateA = a.createdAt?.seconds || 0;
-                    const dateB = b.createdAt?.seconds || 0;
-                    return dateB - dateA;
-                });
-
-                callback(projects);
-            });
-        });
-
-        return () => {
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-            unsubscribeAuth();
-        };
+        return startBackendSubscription<Project>(
+            '/api/projects',
+            (payload) => {
+                const projects = (payload.projects || []) as Project[];
+                return [...projects].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+            },
+            callback,
+        );
     },
 
     createProject: async (title: string) => {
-        const user = auth?.currentUser;
-        if (!user) throw new Error('User not authenticated');
-
-        return addDoc(collection(db, COLLECTIONS.PROJECTS), {
-            title,
-            userId: user.uid,
-            createdAt: serverTimestamp()
+        return fetchJson('/api/projects', {
+            method: 'POST',
+            body: JSON.stringify({ title }),
         });
     },
 
     deleteProject: async (projectId: string) => {
-        // Delete project and all its citations in a batch
-        const batch = writeBatch(db);
-
-        // delete project
-        const projectRef = doc(db, COLLECTIONS.PROJECTS, projectId);
-        batch.delete(projectRef);
-
-        // find citations
-        const q = query(collection(db, COLLECTIONS.CITATIONS), where('projectId', '==', projectId));
-
-        // Importing getDocs dynamically to avoid build issues if not used elsewhere
-        const { getDocs } = await import('firebase/firestore');
-        const snapshot = await getDocs(q);
-        snapshot.docs.forEach(doc => {
-            batch.delete(doc.ref);
+        return fetchJson(`/api/projects/${projectId}`, {
+            method: 'DELETE',
         });
-
-        await batch.commit();
     },
 
-    // Citations
     subscribeToAllUserCitations: (callback: (citations: Citation[]) => void) => {
-        let unsubscribeSnapshot: (() => void) | undefined;
-
-        const unsubscribeAuth = auth.onAuthStateChanged((user) => {
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-
-            if (!user) {
-                callback([]);
-                return;
-            }
-
-            const q = query(
-                collection(db, COLLECTIONS.CITATIONS),
-                where('userId', '==', user.uid)
-            );
-
-            unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-                const citations = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })) as Citation[];
-
-                citations.sort((a, b) => {
-                    const dateA = a.createdAt?.seconds || 0;
-                    const dateB = b.createdAt?.seconds || 0;
-                    return dateB - dateA;
-                });
-
-                callback(citations);
-            });
-        });
-
-        return () => {
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-            unsubscribeAuth();
-        };
+        return startBackendSubscription<Citation>(
+            '/api/citations',
+            (payload) => {
+                const citations = (payload.citations || []) as Citation[];
+                return [...citations].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+            },
+            callback,
+        );
     },
 
     addCitation: async (citation: Omit<Citation, 'id' | 'createdAt' | 'userId'>) => {
-        const user = auth?.currentUser;
-        if (!user) throw new Error('User not authenticated');
-
-        return addDoc(collection(db, COLLECTIONS.CITATIONS), {
-            ...citation,
-            userId: user.uid,
-            createdAt: serverTimestamp()
+        return fetchJson('/api/citations', {
+            method: 'POST',
+            body: JSON.stringify(citation),
         });
     },
 
     deleteCitation: async (citationId: string) => {
-        return deleteDoc(doc(db, COLLECTIONS.CITATIONS, citationId));
-    },
-
-    // API Search
-    searchReferences: async (queryStr: string, sources: string[], year: string) => {
-        const response = await fetch('/api/unified-search-references', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: queryStr, sources, year })
+        return fetchJson(`/api/citations/${citationId}`, {
+            method: 'DELETE',
         });
-        if (!response.ok) throw new Error('Search failed');
-        return response.json();
     },
 
-    // PDF Upload
+    searchReferences: async (queryStr: string, sources: string[], year: string) => {
+        return fetchJson('/api/unified-search-references', {
+            method: 'POST',
+            body: JSON.stringify({ query: queryStr, sources, year }),
+        });
+    },
+
     uploadPdf: async (file: File) => {
         const formData = new FormData();
         formData.append('document', file);

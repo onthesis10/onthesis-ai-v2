@@ -104,12 +104,19 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
             // ── Sprint 5: Handle pending diff from agent ──
             case 'PENDING_DIFF':
                 if (event.diff) {
-                    setPendingDiffs((prev) => [...prev, event.diff]);
+                    const normalizedDiff = {
+                        ...event.diff,
+                        diffId: event.diff.diffId || event.diff.diff_id,
+                        diff_id: event.diff.diff_id || event.diff.diffId,
+                        old_text: event.diff.old_text ?? event.diff.before ?? '',
+                        new_text: event.diff.new_text ?? event.diff.after ?? '',
+                    };
+                    setPendingDiffs((prev) => [...prev, normalizedDiff]);
                     // Apply visual highlight in editor
                     const editor = _getLexicalEditor(editorRef);
                     if (editor) {
                         try {
-                            applyDiffHighlight(editor, event.diff);
+                            applyDiffHighlight(editor, normalizedDiff);
                         } catch (e) {
                             console.warn('[AgentLoop] Could not apply diff highlight:', e);
                         }

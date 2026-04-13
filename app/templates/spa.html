@@ -32,6 +32,11 @@
 <body class="antialiased">
     <div id="root"></div>
 
+    <!-- Firebase Client Config (Hybrid source for SPA runtime) -->
+    <script>
+        window.firebaseConfig = {{ firebase_client_config | tojson }};
+    </script>
+
     <!-- Firebase Auth Token (if available) -->
     {% if firebase_custom_token %}
     <script>window.__FIREBASE_TOKEN__ = "{{ firebase_custom_token }}";</script>

@@ -30,6 +30,7 @@ Bab 5 (Kesimpulan):
 import os
 import json
 import logging
+import re
 from typing import Dict, Any, List, Optional
 from .memory_system import build_memory_prompt_context
 
@@ -153,6 +154,162 @@ class ChapterSkillsAgent:
         except Exception as e:
             logger.error(f"| ChapterSkills | LLM call failed: {e}")
             raise e
+
+    def _split_sentences(self, text: str) -> List[str]:
+        parts = re.split(r'(?<=[.!?])\s+', str(text or "").strip())
+        return [part.strip() for part in parts if part and part.strip()]
+
+    def _normalize_sentence_text(self, text: str) -> str:
+        return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', str(text or ''))).strip().lower()
+
+    def _find_sentence_position(self, candidate: str, source_sentences: List[str]) -> int:
+        normalized_candidate = self._normalize_sentence_text(candidate)
+        if not normalized_candidate:
+            return -1
+        candidate_prefix = normalized_candidate[:80]
+        for idx, source_sentence in enumerate(source_sentences):
+            normalized_source = self._normalize_sentence_text(source_sentence)
+            if not normalized_source:
+                continue
+            if (
+                normalized_candidate == normalized_source
+                or normalized_candidate in normalized_source
+                or normalized_source in normalized_candidate
+                or (candidate_prefix and candidate_prefix in normalized_source)
+            ):
+                return idx
+        return -1
+
+    def _normalize_validate_output(self, raw: Any, source_text: str) -> Dict[str, Any]:
+        """
+        Normalize validate_citations output into a stable structured contract.
+        """
+        contract = {
+            "has_uncited_claims": False,
+            "uncited_sentences": [],
+            "total_sentences": 0,
+            "coverage_ratio": 0.0,
+        }
+
+        source_sentences = self._split_sentences(source_text)
+        contract["total_sentences"] = len(source_sentences)
+
+        if isinstance(raw, dict) and "has_uncited_claims" in raw:
+            uncited_sentences = raw.get("uncited_sentences") or []
+            normalized_uncited = []
+            if isinstance(uncited_sentences, list):
+                for item in uncited_sentences:
+                    if not isinstance(item, dict):
+                        continue
+                    sentence = str(item.get("sentence") or "").strip()
+                    if not sentence:
+                        continue
+                    position = item.get("position")
+                    if not isinstance(position, int) or position < 0:
+                        position = self._find_sentence_position(sentence, source_sentences)
+                    normalized_uncited.append(
+                        {
+                            "sentence": sentence,
+                            "position": position,
+                            "suggestion": str(item.get("suggestion") or "").strip(),
+                        }
+                    )
+            contract.update(
+                {
+                    "has_uncited_claims": bool(raw.get("has_uncited_claims") or normalized_uncited),
+                    "uncited_sentences": normalized_uncited,
+                    "total_sentences": contract["total_sentences"],
+                    "coverage_ratio": 0.0,
+                }
+            )
+            if contract["total_sentences"] > 0:
+                contract["coverage_ratio"] = max(
+                    0.0,
+                    1.0 - (len(normalized_uncited) / contract["total_sentences"]),
+                )
+            return contract
+
+        raw_text = str(raw or "").strip()
+        if not raw_text:
+            if contract["total_sentences"] > 0:
+                contract["coverage_ratio"] = 1.0
+            return contract
+
+        uncited_entries: List[Dict[str, Any]] = []
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        pending_suggestion = ""
+        summary_keywords = (
+            "total klaim",
+            "dengan sitasi",
+            "tanpa sitasi:",
+            "cakupan",
+            "coverage",
+            "ringkasan",
+            "ditemukan",
+            "total kalimat",
+            "kalimat tanpa sitasi",
+        )
+
+        for line in lines:
+            lowered = line.lower()
+            if lowered.startswith("saran:"):
+                pending_suggestion = line.split(":", 1)[1].strip()
+                if uncited_entries and not uncited_entries[-1].get("suggestion"):
+                    uncited_entries[-1]["suggestion"] = pending_suggestion
+                continue
+
+            if line.startswith("#"):
+                continue
+
+            if (
+                line.startswith("-")
+                or line.startswith("•")
+                or re.match(r'^\d+\s*$', line)
+                or any(keyword in lowered for keyword in summary_keywords)
+            ):
+                continue
+
+            if "✗" not in line and "tanpa sitasi" not in lowered and "perlu ditambahkan referensi" not in lowered:
+                continue
+
+            quoted_matches = re.findall(r'["“](.*?)["”]', line)
+            if quoted_matches:
+                sentence = quoted_matches[0].strip()
+            else:
+                sentence = re.sub(r'^\d+\.\s*', '', line).strip()
+                sentence = re.sub(r'—\s*✗.*$', '', sentence).strip()
+                sentence = re.sub(r'✗.*$', '', sentence).strip()
+                sentence = re.sub(r'\bPERLU DITAMBAHKAN REFERENSI\b.*$', '', sentence, flags=re.IGNORECASE).strip()
+            suggestion = pending_suggestion if pending_suggestion else ""
+            pending_suggestion = ""
+
+            position = self._find_sentence_position(sentence, source_sentences)
+
+            if position < 0:
+                continue
+
+            uncited_entries.append(
+                {
+                    "sentence": sentence,
+                    "position": position,
+                    "suggestion": suggestion,
+                }
+            )
+
+        has_uncited_claims = bool(uncited_entries)
+        if not has_uncited_claims:
+            keywords = ("tanpa sitasi", "perlu ditambahkan referensi", "uncited")
+            has_uncited_claims = any(keyword in raw_text.lower() for keyword in keywords)
+
+        covered_sentences = max(contract["total_sentences"] - len(uncited_entries), 0)
+        if contract["total_sentences"] > 0:
+            contract["coverage_ratio"] = covered_sentences / contract["total_sentences"]
+        else:
+            contract["coverage_ratio"] = 0.0
+
+        contract["has_uncited_claims"] = has_uncited_claims
+        contract["uncited_sentences"] = uncited_entries
+        return contract
 
     # ════════════════════════════════════════════════════════════════
     # BAB 1: PENDAHULUAN
@@ -407,10 +564,10 @@ Jawab dalam Bahasa Indonesia formal akademik."""
         except Exception as e:
             return f"Error synthesize_arguments: {e}"
 
-    def validate_citations(self, text: str, known_papers: str = "", **kwargs) -> str:
+    def validate_citations(self, text: str, known_papers: str = "", **kwargs) -> Dict[str, Any]:
         """
         Memastikan setiap klaim dalam teks memiliki sitasi.
-        Mengembalikan daftar klaim tanpa sitasi.
+        Mengembalikan output terstruktur untuk klaim tanpa sitasi.
         """
         prompt = f"""Periksa teks berikut dan identifikasi klaim yang tidak memiliki sitasi:
 
@@ -440,9 +597,11 @@ OUTPUT FORMAT:
 - Dengan sitasi: Y
 - Tanpa sitasi: Z"""
         try:
-            return self._call_llm(prompt, BAB2_PROMPT, max_tokens=1200, memory=kwargs.get("memory"))
+            raw_output = self._call_llm(prompt, BAB2_PROMPT, max_tokens=1200, memory=kwargs.get("memory"))
+            return self._normalize_validate_output(raw_output, text)
         except Exception as e:
-            return f"Error validate_citations: {e}"
+            logger.error("validate_citations failed: %s", e)
+            return self._normalize_validate_output("", text)
 
     # ════════════════════════════════════════════════════════════════
     # BAB 3: METODOLOGI

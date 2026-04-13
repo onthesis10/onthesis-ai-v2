@@ -342,7 +342,7 @@ export default function PricingPage() {
                 <div className="orb orb-2" />
                 <div className="orb orb-3" />
 
-                <button className="back-btn" onClick={() => navigate('/dashboard')}>
+                <button className="back-btn" onClick={() => navigate('/')}>
                     <ArrowLeft size={14} />
                     Kembali
                 </button>

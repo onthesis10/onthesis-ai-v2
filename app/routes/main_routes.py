@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
-    return render_template('landing.html')
+    # Public landing now lives in the SPA entrypoint.
+    return render_template('spa.html')
 
 @main_bp.route('/dashboard')
 @login_required
@@ -79,12 +80,11 @@ def paraphrase_page():
 @main_bp.route('/chat-ai')
 @login_required
 def chat_ai():
-    return render_template('chat_ai.html')
+    return redirect(url_for('main.writing'))
 
 @main_bp.route('/pricing')
-@login_required
 def pricing_page():
-    firebase_custom_token = getattr(current_user, 'firebase_custom_token', None)
+    firebase_custom_token = getattr(current_user, 'firebase_custom_token', None) if current_user.is_authenticated else None
     return render_template('spa.html', firebase_custom_token=firebase_custom_token)
 
 @main_bp.route('/upgrade')

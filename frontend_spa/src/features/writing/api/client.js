@@ -1,7 +1,30 @@
 import { toast } from 'react-hot-toast';
 
 export const UPGRADE_EVENT = 'TRIGGER_UPGRADE_MODAL';
-const BASE_URL = ''; 
+const BASE_URL = '';
+
+function normalizeRequestOptions(extra = {}) {
+    if (!extra || typeof extra !== 'object' || Array.isArray(extra)) {
+        return {};
+    }
+
+    const hasKnownOption = (
+        Object.prototype.hasOwnProperty.call(extra, 'headers')
+        || Object.prototype.hasOwnProperty.call(extra, 'silent')
+        || Object.prototype.hasOwnProperty.call(extra, 'signal')
+        || Object.prototype.hasOwnProperty.call(extra, 'credentials')
+    );
+
+    if (!hasKnownOption) {
+        return { headers: extra };
+    }
+
+    const { headers = {}, ...rest } = extra;
+    return {
+        ...rest,
+        headers,
+    };
+}
 
 class ApiClient {
     async request(endpoint, options = {}) {
@@ -58,11 +81,41 @@ class ApiClient {
         }
     }
 
-    get(endpoint, headers = {}) { return this.request(endpoint, { method: 'GET', headers }); }
-    post(endpoint, body, headers = {}) { return this.request(endpoint, { method: 'POST', body: JSON.stringify(body), headers }); }
-    put(endpoint, body, headers = {}) { return this.request(endpoint, { method: 'PUT', body: JSON.stringify(body), headers }); }
-    delete(endpoint, body, headers = {}) { return this.request(endpoint, { method: 'DELETE', body: JSON.stringify(body), headers }); }
-    upload(endpoint, formData) { return this.request(endpoint, { method: 'POST', body: formData }); }
+    get(endpoint, extra = {}) {
+        return this.request(endpoint, { method: 'GET', ...normalizeRequestOptions(extra) });
+    }
+
+    post(endpoint, body, extra = {}) {
+        return this.request(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(body),
+            ...normalizeRequestOptions(extra),
+        });
+    }
+
+    put(endpoint, body, extra = {}) {
+        return this.request(endpoint, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+            ...normalizeRequestOptions(extra),
+        });
+    }
+
+    delete(endpoint, body, extra = {}) {
+        return this.request(endpoint, {
+            method: 'DELETE',
+            body: JSON.stringify(body),
+            ...normalizeRequestOptions(extra),
+        });
+    }
+
+    upload(endpoint, formData, extra = {}) {
+        return this.request(endpoint, {
+            method: 'POST',
+            body: formData,
+            ...normalizeRequestOptions(extra),
+        });
+    }
 }
 
 export const api = new ApiClient();

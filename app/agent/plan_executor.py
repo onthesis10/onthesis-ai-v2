@@ -1,6 +1,8 @@
 import gevent
 from gevent.timeout import Timeout
+import json
 import logging
+import re
 import time
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
@@ -84,12 +86,17 @@ class PlanExecutor:
         if target_tool in editor_suggestion_tools and isinstance(data, str):
             return data  # EditorAgent.run_tool will map this to new_markdown
 
+        # Preserve the structured literature review contract while allowing the
+        # text itself to be polished in the next writing step.
+        if source_tool == "generate_literature_review" and target_tool == "polish_academic_tone" and isinstance(data, dict):
+            return data
+
         # Apapun → text tools: pastikan string
         if target_tool in text_tools:
             if isinstance(data, str):
                 return data
             if isinstance(data, dict):
-                for key in ('text', 'content', 'result', 'output'):
+                for key in ('review_text', 'text', 'content', 'result', 'output'):
                     if key in data:
                         return str(data[key])
                 return _json.dumps(data, ensure_ascii=False)
@@ -125,13 +132,15 @@ class PlanExecutor:
         self.memory = memory      # Instance dari SharedMemory
         self.on_event = on_event
         self.results = {}         # Menyimpan output per step berdasarkan step_id
+        self.plan_result_commit_attempted = False
+        self.plan_result_committed = False
         # Tetap ketat, tetapi masih cukup untuk flow aktif seperti literature review dan generate chapter.
         self.max_steps = 6
         self.timeout_per_step = 30
         # Timeout khusus per-tool untuk operasi yang membutuhkan lebih lama
         self.tool_timeouts = {
             "generate_literature_review": 40,
-            "search_papers": 35,
+            "search_papers": 60,
             "rank_papers": 25,
             "extract_findings": 30,
             "rewrite_text": 30,
@@ -140,6 +149,7 @@ class PlanExecutor:
             "summarize_text": 25,
             "polish_academic_tone": 30,
             "format_citation": 20,
+            "verify_citations": 45,
         }
         self.retryable_tools = {
             "search_papers",
@@ -152,6 +162,9 @@ class PlanExecutor:
         }
         self.max_retries_per_step = 1
         self.high_token_threshold = 5000
+        self.max_validation_passes = 2
+        self.academic_quality_threshold = 7.0
+        self.structure_quality_threshold = 7.0
 
     def _emit(self, event_type: str, data: dict):
         if not self.on_event:
@@ -160,6 +173,149 @@ class PlanExecutor:
             self.on_event(event_type, data)
         except Exception as emit_error:
             logger.warning(f"Gagal emit event {event_type}: {emit_error}")
+
+    def _commit_plan_result(self, conversation, plan: TaskPlan, result: Any) -> None:
+        """
+        Best-effort commit untuk trace plan dan assistant turn dalam satu helper.
+        Jika salah satu write gagal, cukup log error dan jangan mengganggu response user.
+        """
+        self.plan_result_commit_attempted = True
+        self.plan_result_committed = False
+
+        if not conversation or not plan:
+            return
+
+        plan_id = getattr(plan, "plan_id", getattr(plan, "id", None))
+
+        try:
+            if hasattr(conversation, "add_plan"):
+                conversation.add_plan(plan, str(result))
+            else:
+                raise AttributeError("Conversation object does not support atomic add_plan(plan, result)")
+            self.plan_result_committed = True
+        except Exception as commit_error:
+            logger.error(f"commit_plan_result failed: {commit_error}")
+
+    @staticmethod
+    def _extract_json_payload(raw: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(raw, dict):
+            return raw
+        if not isinstance(raw, str):
+            return None
+        cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+        if not cleaned:
+            return None
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_result_text(result: Any) -> str:
+        if isinstance(result, str):
+            return result
+        if isinstance(result, dict):
+            diff = result.get("diff")
+            if isinstance(diff, dict):
+                return str(diff.get("new_text") or diff.get("after") or "")
+            for key in ("review_text", "text", "content", "output", "message", "result"):
+                value = result.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+        return str(result or "")
+
+    @staticmethod
+    def _replace_result_text(result: Any, new_text: str) -> Any:
+        if isinstance(result, str):
+            return new_text
+        if isinstance(result, dict):
+            updated = dict(result)
+            diff = updated.get("diff")
+            if isinstance(diff, dict):
+                new_diff = dict(diff)
+                if "new_text" in new_diff or "after" in new_diff:
+                    new_diff["new_text"] = new_text
+                    new_diff["after"] = new_text
+                    updated["diff"] = new_diff
+                    return updated
+            for key in ("review_text", "text", "content", "output", "message", "result"):
+                if key in updated and isinstance(updated.get(key), str):
+                    updated[key] = new_text
+                    return updated
+        return new_text
+
+    def _run_generation_validators(self, result: Any) -> Dict[str, Any]:
+        text = self._extract_result_text(result)
+        if not text.strip():
+            return {"needs_refine": False, "feedback": []}
+
+        analysis_agent = self.agents.get("analysis_agent")
+        diagnostic_agent = self.agents.get("diagnostic_agent")
+        feedback = []
+        academic_score = None
+        structure_score = None
+
+        if analysis_agent:
+            score_payload = self._extract_json_payload(
+                analysis_agent.score_thesis_quality(text, memory=self.memory)
+            )
+            score_block = (score_payload or {}).get("scores", {}) if isinstance(score_payload, dict) else {}
+            academic_score = float(score_block.get("academic_tone") or score_payload.get("overall") or 10.0)
+            structure_score = float(score_block.get("structure") or score_payload.get("overall") or 10.0)
+            if academic_score < self.academic_quality_threshold or structure_score < self.structure_quality_threshold:
+                feedback.extend(score_payload.get("improvements", []) or [])
+
+        if diagnostic_agent:
+            citation_report = diagnostic_agent.analyze_for_missing_citations(text, memory=self.memory)
+            if isinstance(citation_report, dict) and citation_report.get("claims_without_citation"):
+                feedback.append(
+                    f"Tambahkan dukungan sitasi pada {citation_report.get('claims_without_citation')} klaim yang masih lemah."
+                )
+
+        deduped_feedback = []
+        seen_feedback = set()
+        for item in feedback:
+            message = str(item or "").strip()
+            if not message or message in seen_feedback:
+                continue
+            seen_feedback.add(message)
+            deduped_feedback.append(message)
+
+        return {
+            "needs_refine": bool(deduped_feedback),
+            "feedback": deduped_feedback,
+            "academic_score": academic_score,
+            "structure_score": structure_score,
+        }
+
+    def _refine_generated_output(self, step, result: Any) -> Any:
+        writing_agent = self.agents.get("writing_agent")
+        if not writing_agent:
+            return result
+
+        candidate = result
+        for pass_index in range(1, self.max_validation_passes + 1):
+            validation = self._run_generation_validators(candidate)
+            if not validation.get("needs_refine"):
+                return candidate
+
+            critique = "; ".join(validation.get("feedback", [])[:4]) or "Perkuat kualitas akademik dan struktur argumen."
+            self._emit("STEP", {
+                "step": "reviewing",
+                "message": (
+                    f"Validator akademik menemukan gap pada {step.tool}. "
+                    f"Refine pass {pass_index}/{self.max_validation_passes}..."
+                ),
+            })
+            revised_text = writing_agent.run_tool(
+                "refine_with_critique",
+                self._extract_result_text(candidate),
+                {"critique": critique},
+                memory=self.memory,
+            )
+            candidate = self._replace_result_text(candidate, self._extract_result_text(revised_text))
+        return candidate
     
     def wait_for_deps(self, depends_on: list[str]):
         """
@@ -282,35 +438,16 @@ class PlanExecutor:
                         if (
                             allow_self_evaluation
                             and step.agent == "writing_agent"
-                            and step.tool in ["rewrite_text", "paraphrase_text", "expand_paragraph", "generate_literature_review"]
+                            and step.tool in ["rewrite_text", "paraphrase_text", "expand_paragraph", "generate_literature_review", "generate_section", "polish_academic_tone"]
                         ):
-                            analysis_agent = self.agents.get("analysis_agent")
-                            writing_agent = self.agents.get("writing_agent")
-                            if analysis_agent and writing_agent:
-                                remaining_budget = max(1, step_timeout - (time.time() - step_started_at))
-                                logger.info(f"Menjalankan self-evaluation loop untuk hasil {step.tool}. Remaining budget={remaining_budget:.2f}s")
-                                with Timeout(remaining_budget):
-                                    self._emit("STEP", {"step": "evaluating", "message": f"Mengevaluasi {step.tool}..."})
-                                    try:
-                                        score_json_str = analysis_agent.score_thesis_quality(result, memory=self.memory)
-                                        import json
-                                        import re
-                                        clean_json = re.sub(r'```(?:json)?\s*|\s*```', '', score_json_str).strip()
-                                        score_data = json.loads(clean_json)
-                                        if float(score_data.get("overall", 10.0)) < 7.0:
-                                            improvements_list = score_data.get("improvements", ["Kualitas kurang akademis"])
-                                            improvements = ", ".join(improvements_list)
-                                            self._emit("STEP", {"step": "revising", "message": f"Kritik: {improvements} - Sedang merevisi..."})
-                                            logger.info(f"Self-evaluation score < 7.0 ({score_data.get('overall')}). Revising... Kritik: {improvements}")
-                                            result = writing_agent.run_tool(
-                                                "refine_with_critique",
-                                                result,
-                                                {"critique": improvements},
-                                                memory=self.memory,
-                                            )
-                                            logger.info("Revisi selesai.")
-                                    except Exception as eval_err:
-                                        logger.warning(f"Self-evaluation terlewati (error/JSON invalid): {eval_err}")
+                            remaining_budget = max(1, step_timeout - (time.time() - step_started_at))
+                            logger.info(f"Menjalankan validator loop untuk hasil {step.tool}. Remaining budget={remaining_budget:.2f}s")
+                            with Timeout(remaining_budget):
+                                self._emit("STEP", {"step": "evaluating", "message": f"Memvalidasi kualitas {step.tool}..."})
+                                try:
+                                    result = self._refine_generated_output(step, result)
+                                except Exception as eval_err:
+                                    logger.warning(f"Validator loop terlewati (error): {eval_err}")
                         # ---------------------------------------
 
                     duration_ms = int((time.time() - step_started_at) * 1000)
@@ -405,10 +542,6 @@ class PlanExecutor:
                 return ERROR_MESSAGES["empty_input"]
             return ERROR_MESSAGES["general"]
         
-        # Simpan state plan selesai di ConversationMemory jika ada memory
-        if self.memory and hasattr(self.memory, 'conversation'):
-            self.memory.conversation.store_plan(plan)
-
         # S2-5: Minimal Observability - Step Latency Summary
         if plan.execution_trace:
             total_ms = sum(t.get("duration_ms", 0) for t in plan.execution_trace)

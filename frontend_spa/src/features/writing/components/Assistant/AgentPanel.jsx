@@ -577,6 +577,7 @@ function DiffActionCard({ diff, onAccept, onReject, theme, status }) {
     const t = tok(theme);
     const isDark = theme === 'dark';
     const resolved = status === 'accepted' || status === 'rejected';
+    const previewText = diff.new_text || diff.after || '';
     const cfg = {
         edit: { color: t.accent, label: 'Edit', Icon: PenLine },
         insert: { color: t.green, label: 'Insert', Icon: Plus },
@@ -591,9 +592,9 @@ function DiffActionCard({ diff, onAccept, onReject, theme, status }) {
                 <span style={{ fontFamily: t.mono, fontSize: 9, color: t.textDim, marginLeft: 'auto' }}>{diff.paraId}</span>
             </div>
             {diff.reason && <p style={{ fontSize: 11, color: t.textMid, lineHeight: 1.55, marginBottom: 8 }}>{diff.reason}</p>}
-            {(diff.type === 'edit' || diff.type === 'insert') && diff.after && (
+            {(diff.type === 'edit' || diff.type === 'insert') && previewText && (
                 <div className="ap-scroll" style={{ fontFamily: t.mono, fontSize: 10, color: t.textMid, background: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.03)', borderRadius: 5, padding: '6px 8px', maxHeight: 72, overflowY: 'auto', lineHeight: 1.55, marginBottom: 9 }}>
-                    {diff.after.substring(0, 220)}{diff.after.length > 220 ? '…' : ''}
+                    {previewText.substring(0, 220)}{previewText.length > 220 ? '…' : ''}
                 </div>
             )}
             {resolved ? (

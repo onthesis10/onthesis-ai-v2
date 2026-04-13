@@ -7,9 +7,11 @@ import {
     StopCircle 
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useProject } from '../../../context/ProjectContext';
 
 export default function FloatingToolbarPlugin() {
     const [editor] = useLexicalComposerContext();
+    const { project, projectId, activeChapterId } = useProject();
     const [isTextSelected, setIsTextSelected] = useState(false);
     const [position, setPosition] = useState({ top: 0, left: 0 });
     const [isProcessing, setIsProcessing] = useState(false);
@@ -86,6 +88,20 @@ export default function FloatingToolbarPlugin() {
             return;
         }
 
+        const instructionMap = {
+            paraphrase: `Parafrase teks berikut tanpa mengubah makna akademiknya:\n${selectedText}`,
+            expand: `Kembangkan teks berikut agar lebih detail dan tetap akademik:\n${selectedText}`,
+            shorten: `Ringkas teks berikut tanpa menghilangkan makna inti akademiknya:\n${selectedText}`,
+            formalize: `Ubah teks berikut menjadi gaya bahasa akademik formal:\n${selectedText}`,
+        };
+
+        const agentTask = instructionMap[mode] || instructionMap.paraphrase;
+        const resolvedProjectId =
+            projectId ||
+            project?.id ||
+            window.localStorage.getItem('last_active_project_id') ||
+            'writing-inline-tools';
+
         try {
             // 1. HAPUS TEKS LAMA DULU (Agar terlihat mulai mengetik dari kosong)
             editor.update(() => {
@@ -96,13 +112,23 @@ export default function FloatingToolbarPlugin() {
             });
 
             // 2. REQUEST KE BACKEND (Wajib stream: true)
-            const response = await fetch('/api/ai/edit-text', {
+            const response = await fetch('/api/agent/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    text: selectedText, 
-                    mode: mode,
-                    stream: true // <--- INI WAJIB ADA AGAR TIDAK JSON
+                    task: agentTask,
+                    projectId: resolvedProjectId,
+                    chapterId: activeChapterId || '',
+                    context: {
+                        requestedTask: mode,
+                        context_title: project?.title || '',
+                        context_problem: project?.problem_statement || '',
+                        context_method: project?.methodology || '',
+                        selection_html: selectedText,
+                        active_paragraphs: [
+                            { paraId: 'floating-toolbar-selection', content: selectedText }
+                        ],
+                    },
                 }),
                 signal: abortControllerRef.current.signal
             });
@@ -112,20 +138,37 @@ export default function FloatingToolbarPlugin() {
             // 3. BACA STREAM (CHUNK PER CHUNK)
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                
-                // Masukkan potongan teks sekecil apapun
-                editor.update(() => {
-                    const selection = $getSelection();
-                    if ($isRangeSelection(selection)) {
-                        selection.insertText(chunk);
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+
+                for (const rawEvent of events) {
+                    const trimmed = rawEvent.trim();
+                    if (!trimmed.startsWith('data:')) continue;
+
+                    const payload = trimmed.replace(/^data:\s*/, '');
+                    if (!payload || payload === '[DONE]') continue;
+
+                    const event = JSON.parse(payload);
+                    if (event.type === 'TEXT_DELTA') {
+                        const chunk = event.delta || '';
+                        editor.update(() => {
+                            const selection = $getSelection();
+                            if ($isRangeSelection(selection)) {
+                                selection.insertText(chunk);
+                            }
+                        });
                     }
-                });
+                    if (event.type === 'ERROR') {
+                        throw new Error(event.message || 'Gagal terhubung ke AI');
+                    }
+                }
             }
 
             // Jika pakai toast

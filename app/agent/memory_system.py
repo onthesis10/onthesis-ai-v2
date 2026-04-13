@@ -26,6 +26,12 @@ import google.generativeai as genai
 
 # --- QDRANT VECTOR DB & EMBEDDING ---
 
+VECTOR_COLLECTION_ALIASES = {
+    "research_papers": "research_papers_v2",
+    "thesis_chunks": "thesis_chunks_v2",
+    "thesis_summaries": "thesis_summaries_v2",
+}
+
 def embed(text: str) -> List[float]:
     """Generate embeddings using Gemini text-embedding-004 (3072 dimensions) with caching"""
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -77,10 +83,14 @@ class QdrantVectorDB:
                 self.client = QdrantClient(":memory:")
             
         self._ensure_collections()
+
+    def _resolve_collection_name(self, collection: str) -> str:
+        return VECTOR_COLLECTION_ALIASES.get(collection, collection)
         
     def _ensure_collections(self):
         collections = ["research_papers", "thesis_chunks", "thesis_summaries"]
-        for col in collections:
+        for logical_collection in collections:
+            col = self._resolve_collection_name(logical_collection)
             # Note: During testing, we ensure that the dimensions match 3072.
             if self.client.collection_exists(col):
                 info = self.client.get_collection(col)
@@ -97,17 +107,24 @@ class QdrantVectorDB:
                     vectors_config=VectorParams(size=3072, distance=Distance.COSINE),
                 )
             
-            # Ensure keyword index for filtering (Required by Qdrant Cloud for some queries)
-            try:
-                self.client.create_payload_index(
-                    collection_name=col,
-                    field_name="doc_id",
-                    field_schema="keyword",
-                )
-            except Exception:
-                pass  # Already exists or transient error
+            for field_name, field_schema in (
+                ("doc_id", "keyword"),
+                ("paper_id", "keyword"),
+                ("scope_id", "keyword"),
+                ("user_id", "keyword"),
+                ("project_id", "keyword"),
+                ("chapter_id", "keyword"),
+            ):
+                try:
+                    self.client.create_payload_index(
+                        collection_name=col,
+                        field_name=field_name,
+                        field_schema=field_schema,
+                    )
+                except Exception:
+                    pass  # Already exists or transient error
             
-            if col == "thesis_chunks":
+            if logical_collection == "thesis_chunks":
                 try:
                     self.client.create_payload_index(
                         collection_name=col,
@@ -127,6 +144,7 @@ class QdrantVectorDB:
                     pass
 
     def upsert(self, collection: str, points: List[Dict]):
+        collection = self._resolve_collection_name(collection)
         qdrant_points = []
         for p in points:
             point_id = p["id"]
@@ -144,6 +162,7 @@ class QdrantVectorDB:
         self.client.upsert(collection_name=collection, points=qdrant_points)
 
     def search(self, collection: str, query_vector: List[float], filter: dict = None, score_threshold: float = None, limit: int = 10):
+        collection = self._resolve_collection_name(collection)
         qdrant_filter = None
         if filter:
             must_conditions = [FieldCondition(key=k, match=MatchValue(value=v)) for k, v in filter.items()]
@@ -159,6 +178,7 @@ class QdrantVectorDB:
         return res.points
 
     def scroll(self, collection: str, scroll_filter: dict, order_by: str, limit: int):
+        collection = self._resolve_collection_name(collection)
         qdrant_filter = None
         if scroll_filter:
             must_conditions = [FieldCondition(key=k, match=MatchValue(value=v)) for k, v in scroll_filter.items()]
@@ -405,8 +425,8 @@ class ConversationMemory:
             raw = json.dumps([t.to_dict() for t in self.turns])
             redis_client.setex(f"conv:{self.scope_id}", 86400, raw) # 24 jam TTL
 
-    def add_turn(self, role: str, content: str, intent: str = None, plan_id: str = None):
-        turn = ConversationTurn(
+    def _build_turn(self, role: str, content: str, intent: str = None, plan_id: str = None) -> ConversationTurn:
+        return ConversationTurn(
             role=role,
             content=content,
             intent=intent,
@@ -414,13 +434,27 @@ class ConversationMemory:
             timestamp=datetime.now(),
             tokens_used=count_tokens(content)
         )
+
+    def _append_turn(self, turn: ConversationTurn):
         self.turns.append(turn)
-        
+
         # Trim kalau terlalu panjang (kompresi)
         if len(self.turns) > self.max_turns:
             self._compress_old_turns()
-            
+
         self.save()
+
+    def add_turn(self, role: str, content: str, intent: str = None, plan_id: str = None):
+        turn = self._build_turn(role=role, content=content, intent=intent, plan_id=plan_id)
+        self._append_turn(turn)
+
+    def add_assistant_turn(self, content: str, intent: str = None, plan_id: str = None):
+        self.add_turn(
+            role="assistant",
+            content=content,
+            intent=intent,
+            plan_id=plan_id,
+        )
             
     def get_context_window(self, last_n: int = 6) -> List[Dict]:
         recent = self.turns[-last_n:]
@@ -534,13 +568,24 @@ class ConversationMemory:
             self.db.save_plan(self.scope_id, plan)
 
     def add_plan(self, plan: TaskPlan, result: str):
-        self.store_plan(plan)
-        self.add_turn(
+        previous_turns = list(self.turns)
+        previous_plans = dict(self.plans)
+        assistant_turn = self._build_turn(
             role="assistant",
             content=result,
             intent=plan.intent,
-            plan_id=plan.plan_id
+            plan_id=plan.plan_id,
         )
+
+        try:
+            self.store_plan(plan)
+            self._append_turn(assistant_turn)
+        except Exception:
+            self.turns = previous_turns
+            self.plans = previous_plans
+            with suppress(Exception):
+                self.save()
+            raise
 
 # --- DOCUMENT MEMORY ---
 
@@ -565,9 +610,42 @@ class ThesisDocument:
     last_updated: datetime
 
 class DocumentMemory:
-    def __init__(self, vector_db):
+    def __init__(self, vector_db, user_id: Optional[str] = None, project_id: Optional[str] = None):
         self.vector_db = vector_db
+        self.user_id = str(user_id) if user_id else ""
+        self.project_id = str(project_id) if project_id else ""
         self.versions_counter = {} # chunk_id -> int
+
+    def _resolve_scope(self, doc_id: Optional[str] = None) -> Dict[str, str]:
+        user_id = self.user_id
+        project_id = self.project_id
+
+        if (not user_id or not project_id) and doc_id and ":" in str(doc_id):
+            inferred_user, inferred_project = str(doc_id).split(":", 1)
+            user_id = user_id or inferred_user
+            project_id = project_id or inferred_project
+
+        scope: Dict[str, str] = {}
+        if user_id:
+            scope["user_id"] = user_id
+        if project_id:
+            scope["project_id"] = project_id
+        if user_id and project_id:
+            scope["scope_id"] = f"{user_id}:{project_id}"
+        return scope
+
+    def _build_filter(self, doc_id: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
+        scoped_filter: Dict[str, Any] = {}
+        scope = self._resolve_scope(doc_id=doc_id)
+        if scope.get("scope_id"):
+            scoped_filter["scope_id"] = scope["scope_id"]
+        elif doc_id:
+            scoped_filter["doc_id"] = doc_id
+
+        for key, value in extra.items():
+            if value is not None and value != "":
+                scoped_filter[key] = value
+        return scoped_filter
         
     def _get_next_version(self, doc_id: str, section: str) -> int:
         key = f"{doc_id}_{section}"
@@ -590,7 +668,9 @@ class DocumentMemory:
                     "content": content,
                     "version": version,
                     "chunk_index": chunk_index,
-                    "last_edited": datetime.now().isoformat()
+                    "last_edited": datetime.now().isoformat(),
+                    "schema_version": 2,
+                    **self._resolve_scope(doc_id=doc_id),
                 }
             }]
         )
@@ -600,32 +680,56 @@ class DocumentMemory:
         results = self.vector_db.search(
             collection="thesis_chunks",
             query_vector=embedding,
-            filter={"doc_id": doc_id},
+            filter=self._build_filter(doc_id=doc_id),
             limit=top_k
         )
         if not results:
             return ""
         return "\n\n".join([r.payload["content"] for r in results])
         
-    def get_section(self, doc_id: str, section: str) -> list:
-        """Return ordered list of chunk contents for a doc_id + section."""
+    def get_section(self, doc_id: str, section: str, raw: bool = False) -> Optional[Any]:
+        """
+        DocumentMemory v2 Contract
+        --------------------------
+        raw=False (default):
+            return str — chunks di-join dengan '\n\n'
+            backward compatible dengan semua caller lama
+
+        raw=True:
+            return list[ChunkDict]
+            ChunkDict: {
+                text: str,
+                embedding_id: str,
+                position: int,
+                updated_at: str  # ISO format
+            }
+
+        Return None jika section tidak ditemukan.
+        """
         results = self.vector_db.scroll(
             collection="thesis_chunks",
-            scroll_filter={
-                "doc_id": doc_id,
-                "section": section
-            },
+            scroll_filter=self._build_filter(doc_id=doc_id, section=section),
             order_by="chunk_index",
             limit=50
         )
         if not results:
-            return []
+            return None
         # Sort by chunk_index ascending, tiebreak by version descending
         sorted_results = sorted(
             results,
             key=lambda r: (r.payload.get("chunk_index", 0), -r.payload.get("version", 0))
         )
-        return [r.payload.get("content", "") for r in sorted_results]
+        if raw:
+            return [
+                {
+                    "text": record.payload.get("content", ""),
+                    "embedding_id": str(getattr(record, "id", "") or ""),
+                    "position": int(record.payload.get("chunk_index", 0) or 0),
+                    "updated_at": str(record.payload.get("last_edited", "") or ""),
+                }
+                for record in sorted_results
+            ]
+        return "\n\n".join(record.payload.get("content", "") for record in sorted_results)
 
     def add_or_update_chapter_summary(self, doc_id: str, chapter_id: str, summary: str):
         """Saves or updates a concise summary of a chapter into Qdrant."""
@@ -640,7 +744,9 @@ class DocumentMemory:
                     "doc_id": doc_id,
                     "chapter_id": chapter_id,
                     "summary": summary,
-                    "last_updated": datetime.now().isoformat()
+                    "last_updated": datetime.now().isoformat(),
+                    "schema_version": 2,
+                    **self._resolve_scope(doc_id=doc_id),
                 }
             }]
         )
@@ -649,7 +755,7 @@ class DocumentMemory:
         """Retrieves all summaries for a specific thesis."""
         results = self.vector_db.scroll(
             collection="thesis_summaries",
-            scroll_filter={"doc_id": doc_id},
+            scroll_filter=self._build_filter(doc_id=doc_id),
             order_by=None,
             limit=20
         )
@@ -658,10 +764,54 @@ class DocumentMemory:
 # --- RESEARCH MEMORY ---
 
 class ResearchMemory:
-    def __init__(self, vector_db):
+    def __init__(self, vector_db, user_id: Optional[str] = None, project_id: Optional[str] = None):
         self.vector_db = vector_db
+        self.user_id = str(user_id) if user_id else ""
+        self.project_id = str(project_id) if project_id else ""
         self.papers: Dict[str, "StoredPaper"] = {}
         self.topic_index: Dict[str, List[str]] = {}
+
+    def _resolve_scope(self) -> Dict[str, str]:
+        scope: Dict[str, str] = {}
+        if self.user_id:
+            scope["user_id"] = self.user_id
+        if self.project_id:
+            scope["project_id"] = self.project_id
+        if self.user_id and self.project_id:
+            scope["scope_id"] = f"{self.user_id}:{self.project_id}"
+        return scope
+
+    def _build_filter(self, **extra: Any) -> Dict[str, Any]:
+        scoped_filter: Dict[str, Any] = {}
+        scope = self._resolve_scope()
+        if scope.get("scope_id"):
+            scoped_filter["scope_id"] = scope["scope_id"]
+        else:
+            if scope.get("user_id"):
+                scoped_filter["user_id"] = scope["user_id"]
+            if scope.get("project_id"):
+                scoped_filter["project_id"] = scope["project_id"]
+
+        for key, value in extra.items():
+            if value is not None and value != "":
+                scoped_filter[key] = value
+        return scoped_filter
+
+    def _build_citation_key(self, payload: Dict[str, Any]) -> str:
+        citation_key = str(payload.get("citation_key") or "").strip()
+        if citation_key:
+            return citation_key
+
+        doi = str(payload.get("doi") or "").strip().lower()
+        if doi:
+            return doi.replace("/", "_").replace(":", "_")
+
+        paper_id = str(payload.get("paper_id") or "").strip().lower()
+        if paper_id:
+            return paper_id.replace("/", "_").replace(":", "_")
+
+        title = str(payload.get("title") or "unknown").strip().lower()
+        return "_".join(title.split())[:64] or "unknown"
 
     def _normalize_paper_payload(self, paper_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         required = ("paper_id", "title", "authors", "year", "abstract", "relevance_score", "citation_count", "doi", "source", "topics")
@@ -669,12 +819,95 @@ class ResearchMemory:
             return None
 
         payload = dict(paper_data)
+        payload["citation_key"] = self._build_citation_key(payload)
         payload.setdefault("key_findings", "")
         payload.setdefault("added_at", datetime.now())
         payload.setdefault("last_refreshed_at", datetime.now().isoformat())
         payload.setdefault("expires_at", (datetime.now() + timedelta(days=30)).isoformat())
         payload.setdefault("is_academic_source", payload.get("source") != "web_search")
+        payload.setdefault("schema_version", 2)
+        payload.update({k: v for k, v in self._resolve_scope().items() if v})
         return payload
+
+    def _coerce_stored_paper_payload(self, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        normalized = self._normalize_paper_payload(payload)
+        if not normalized:
+            return None
+
+        added_at = normalized.get("added_at")
+        if isinstance(added_at, str):
+            try:
+                normalized["added_at"] = datetime.fromisoformat(added_at)
+            except Exception:
+                normalized["added_at"] = datetime.now()
+        elif not isinstance(added_at, datetime):
+            normalized["added_at"] = datetime.now()
+
+        return normalized
+
+    def _cache_paper_payload(self, payload: Dict[str, Any]) -> Optional["StoredPaper"]:
+        from .research_agent import StoredPaper
+
+        normalized = self._coerce_stored_paper_payload(payload)
+        if not normalized:
+            return None
+
+        allowed_fields = getattr(StoredPaper, "__dataclass_fields__", {}) or {}
+        paper_payload = {
+            key: value for key, value in normalized.items()
+            if key in allowed_fields
+        }
+        paper = StoredPaper(**paper_payload)
+        self.papers[paper.paper_id] = paper
+
+        for topic in paper.topics:
+            if topic not in self.topic_index:
+                self.topic_index[topic] = []
+            if paper.paper_id not in self.topic_index[topic]:
+                self.topic_index[topic].append(paper.paper_id)
+
+        return paper
+
+    def _format_as_citation(self, paper: "StoredPaper", style: str = "APA") -> Dict[str, Any]:
+        return {
+            "paper_id": paper.paper_id,
+            "citation_key": paper.citation_key or self._build_citation_key(paper.__dict__),
+            "formatted": format_citation(paper, style),
+            "doi": paper.doi or None,
+        }
+
+    async def _fetch_papers_from_db(self, paper_ids: List[str]) -> List["StoredPaper"]:
+        fetched: List["StoredPaper"] = []
+        seen_ids = set()
+
+        for paper_id in paper_ids:
+            try:
+                records = self.vector_db.scroll(
+                    collection="research_papers",
+                    scroll_filter=self._build_filter(paper_id=paper_id),
+                    order_by=None,
+                    limit=1,
+                )
+            except Exception as exc:
+                logger.warning("ResearchMemory DB fetch failed for %s: %s", paper_id, exc)
+                continue
+
+            for record in records or []:
+                payload = dict(getattr(record, "payload", {}) or {})
+                if not payload:
+                    continue
+                if self._is_expired(payload):
+                    continue
+                if payload.get("is_academic_source") is False:
+                    continue
+
+                payload.setdefault("paper_id", paper_id)
+                paper = self._cache_paper_payload(payload)
+                if paper and paper.paper_id not in seen_ids:
+                    fetched.append(paper)
+                    seen_ids.add(paper.paper_id)
+
+        return fetched
 
     def _is_expired(self, payload: Dict[str, Any]) -> bool:
         expires_at = payload.get("expires_at")
@@ -686,9 +919,8 @@ class ResearchMemory:
             return False
         
     def add_papers(self, papers: List[Dict]):
-        from .research_agent import StoredPaper
         for paper_data in papers:
-            normalized_payload = self._normalize_paper_payload(paper_data)
+            normalized_payload = self._coerce_stored_paper_payload(paper_data)
             if not normalized_payload:
                 logger.warning("Skipping paper without normalized schema in ResearchMemory.add_papers")
                 continue
@@ -699,19 +931,17 @@ class ResearchMemory:
             # Hilangkan final_score jika masuk via ranker dictionary
             normalized_payload.pop('final_score', None)
 
-            paper = StoredPaper(**normalized_payload)
-            self.papers[paper.paper_id] = paper
-            
-            for topic in paper.topics:
-                if topic not in self.topic_index:
-                    self.topic_index[topic] = []
-                self.topic_index[topic].append(paper.paper_id)
+            paper = self._cache_paper_payload(normalized_payload)
+            if not paper:
+                continue
                 
             embedding = embed(paper.abstract)
+            scope_id = normalized_payload.get("scope_id")
+            point_id = f"{scope_id}:{paper.paper_id}" if scope_id else paper.paper_id
             self.vector_db.upsert(
                 collection="research_papers",
                 points=[{
-                    "id": paper.paper_id,
+                    "id": point_id,
                     "vector": embedding,
                     "payload": normalized_payload
                 }]
@@ -722,6 +952,7 @@ class ResearchMemory:
         results = self.vector_db.search(
             collection="research_papers",
             query_vector=embedding,
+            filter=self._build_filter(),
             score_threshold=min_relevance,
             limit=10
         )
@@ -743,13 +974,38 @@ class ResearchMemory:
         
     def is_paper_known(self, doi: str) -> bool:
         return doi in [p.doi for p in self.papers.values()]
-        
-    def get_citations(self, paper_ids: List[str], style: str = "APA") -> List[str]:
-        citations = []
-        for pid in paper_ids:
-            paper = self.papers.get(pid)
+
+    async def get_citations(self, paper_ids: List[str], style: str = "APA") -> List[Dict[str, Any]]:
+        """
+        Ambil citations dari cache instance dulu (fast path).
+        Kalau ada yang missing → fallback ke persistence layer.
+        Expiry 30 hari tetap dihormati dari DB.
+        """
+        ordered_ids = [paper_id for paper_id in paper_ids if paper_id]
+        if not ordered_ids:
+            return []
+
+        cached_by_id: Dict[str, "StoredPaper"] = {}
+        for paper_id in ordered_ids:
+            paper = self.papers.get(paper_id)
+            if not paper:
+                continue
+            if self._is_expired(paper.__dict__):
+                continue
+            cached_by_id[paper_id] = paper
+
+        missing_ids = [paper_id for paper_id in ordered_ids if paper_id not in cached_by_id]
+        if missing_ids:
+            from_db = await self._fetch_papers_from_db(missing_ids)
+            for paper in from_db:
+                cached_by_id[paper.paper_id] = paper
+
+        citations: List[Dict[str, Any]] = []
+        for paper_id in ordered_ids:
+            paper = cached_by_id.get(paper_id)
             if paper:
-                citations.append(format_citation(paper, style))
+                citations.append(self._format_as_citation(paper, style))
+
         return citations
 
 # --- USER PROFILE MEMORY ---
@@ -944,8 +1200,8 @@ class SharedMemory:
         self.project_scope = f"{self.user_id}:{self.project_id}"
         self.db = db
         self.conversation = ConversationMemory(scope_id=self.project_scope, max_turns=20, db=db)
-        self.document = DocumentMemory(vector_db)
-        self.research = ResearchMemory(vector_db)
+        self.document = DocumentMemory(vector_db, user_id=self.user_id, project_id=self.project_id)
+        self.research = ResearchMemory(vector_db, user_id=self.user_id, project_id=self.project_id)
         self.profile = UserProfileMemory(db)
 
     def _project_doc_id(self) -> str:

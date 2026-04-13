@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const isFastBuild = process.env.FAST_BUILD === '1'
+
 export default defineConfig({
     plugins: [react()],
     resolve: {
@@ -14,6 +16,10 @@ export default defineConfig({
         outDir: '../app/static/js/dist',
         emptyOutDir: true,
         cssCodeSplit: false,
+        reportCompressedSize: false,
+        chunkSizeWarningLimit: 1400,
+        minify: isFastBuild ? false : 'esbuild',
+        cssMinify: isFastBuild ? false : true,
         rollupOptions: {
             output: {
                 entryFileNames: 'spa-bundle.js',

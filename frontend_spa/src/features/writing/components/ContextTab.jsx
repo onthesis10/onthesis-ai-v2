@@ -49,20 +49,67 @@ export default function ContextTab() {
         }
 
         try {
-            const res = await fetch('/api/writing/quick-fix', {
+            const projectId =
+                new URLSearchParams(window.location.search).get('id')
+                || localStorage.getItem('last_active_project_id')
+                || 'writing-workspace';
+            const promptMap = {
+                formalize: `Ubah teks berikut menjadi bahasa akademik formal. Jangan tambahkan penjelasan. Kembalikan hanya hasil revisinya:\n${action.text}`,
+                shorten: `Pecah teks berikut menjadi 2-3 kalimat yang lebih ringkas dan jelas tanpa mengubah makna. Kembalikan hanya hasil revisinya:\n${action.text}`,
+                paraphrase: `Parafrase teks berikut tanpa mengubah makna akademiknya. Kembalikan hanya hasil revisinya:\n${action.text}`,
+            };
+
+            const res = await fetch('/api/agent/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    text: action.text,
-                    mode: action.mode,
-                    stream: false,
+                    task: promptMap[action.mode] || promptMap.paraphrase,
+                    projectId,
+                    chapterId: '',
+                    context: {
+                        requestedTask: action.mode,
+                        active_paragraphs: [],
+                        selection_html: action.text,
+                        quick_fix_excerpt: action.text,
+                        response_mode: 'text_only',
+                    },
                 }),
             });
 
             if (!res.ok) throw new Error('AI request failed');
+            if (!res.body) throw new Error('No response body');
 
-            const data = await res.json();
-            const result = data.result || data.text || '';
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let result = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+
+                for (const rawEvent of events) {
+                    const trimmed = rawEvent.trim();
+                    if (!trimmed.startsWith('data:')) continue;
+                    const payload = trimmed.replace(/^data:\s*/, '');
+                    if (!payload || payload === '[DONE]') continue;
+
+                    const event = JSON.parse(payload);
+                    if (event.type === 'TEXT_DELTA') {
+                        result += event.delta || '';
+                    }
+                    if (event.type === 'PENDING_DIFF' && !result.trim()) {
+                        result = event.diff?.new_text || event.diff?.after || '';
+                    }
+                    if (event.type === 'ERROR') {
+                        throw new Error(event.message || 'AI request failed');
+                    }
+                }
+            }
 
             if (result) {
                 // Copy fixed text to clipboard and notify user

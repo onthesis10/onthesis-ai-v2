@@ -36,6 +36,20 @@ const defaultGoldenThread = {
     conclusion: '',
 };
 
+const SUMMARY_DEBOUNCE_MS = 15000;
+const SUMMARY_TIMEOUT_MS = 15000;
+const SUMMARY_MIN_TEXT_LENGTH = 400;
+
+function extractPlainText(htmlString = '') {
+    if (typeof window === 'undefined') {
+        return String(htmlString || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString || '', 'text/html');
+    return (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
 const ProjectContext = createContext();
 
 export function ProjectProvider({ children }) {
@@ -68,6 +82,9 @@ export function ProjectProvider({ children }) {
     const [chapterSummaries, setChapterSummaries] = useState({});
 
     const saveTimeoutRef = useRef(null);
+    const summaryTimeoutRef = useRef(null);
+    const summaryAbortRef = useRef(null);
+    const lastSummarySignatureRef = useRef('');
 
     // --- HELPER: Load Konten Bab ---
     const fetchChapterContent = useCallback(async (pid, cid) => {
@@ -171,8 +188,9 @@ export function ProjectProvider({ children }) {
     }, [fetchChapterContent, activeChapterId]);
 
     // --- 2. SAVE KONTEN BAB (AUTOSAVE) ---
-    const saveContent = useCallback((htmlString) => {
+    const saveContent = useCallback((htmlString, options = {}) => {
         if (isContentLoading || isLoading || !projectId) return;
+        const { mode = 'autosave' } = options;
 
         // Update local state segera
         setContent(htmlString);
@@ -189,8 +207,12 @@ export function ProjectProvider({ children }) {
                     chapterId: activeChapterId,
                     content: htmlString,
                     title: currentChapter?.title || 'Bab Tanpa Judul',
-                    index: currentChapter?.index || 0
-                }, { silent: true }); // Silent = true biar ga spam toast sukses
+                    index: currentChapter?.index || 0,
+                    saveMode: mode,
+                }, {
+                    silent: true,
+                    headers: { 'X-Save-Mode': mode },
+                }); // Silent = true biar ga spam toast sukses
             } catch (e) {
                 console.error("Save failed:", e);
             } finally {
@@ -209,7 +231,11 @@ export function ProjectProvider({ children }) {
             api.post(`/api/project/${projectId}/chapter/save`, {
                 chapterId: activeChapterId,
                 content: content,
-            }, { silent: true }).catch(() => { });
+                saveMode: 'flush',
+            }, {
+                silent: true,
+                headers: { 'X-Save-Mode': 'flush' },
+            }).catch(() => { });
         }
 
         setIsContentLoading(true);
@@ -286,21 +312,67 @@ export function ProjectProvider({ children }) {
     // --- Sprint 2: UPDATE CHAPTER SUMMARY (fire-and-forget) ---
     const updateChapterSummary = useCallback((chapterId, htmlContent) => {
         if (!projectId || !chapterId || !htmlContent) return;
-        // Fire and forget — don't await, don't block save
-        fetch('/api/summarize-chapter', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId, chapterId, content: htmlContent })
-        })
-            .then(r => r.json())
-            .then(({ summary }) => {
-                if (summary) {
+        const plainText = extractPlainText(htmlContent);
+        if (plainText.length < SUMMARY_MIN_TEXT_LENGTH) return;
+
+        const signature = `${projectId}:${chapterId}:${plainText.slice(0, 500)}`;
+        if (signature === lastSummarySignatureRef.current) return;
+
+        if (summaryTimeoutRef.current) {
+            clearTimeout(summaryTimeoutRef.current);
+        }
+
+        if (summaryAbortRef.current) {
+            summaryAbortRef.current.abort();
+        }
+
+        summaryTimeoutRef.current = setTimeout(() => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), SUMMARY_TIMEOUT_MS);
+            summaryAbortRef.current = controller;
+
+            fetch('/api/summarize-chapter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId, chapterId, content: plainText }),
+                signal: controller.signal,
+            })
+                .then(async (response) => {
+                    if (!response.ok) {
+                        throw new Error(`Summary request failed (${response.status})`);
+                    }
+                    return response.json();
+                })
+                .then(({ summary }) => {
+                    if (!summary) return;
+                    lastSummarySignatureRef.current = signature;
                     setChapterSummaries(prev => ({ ...prev, [chapterId]: summary }));
                     console.log(`[ContextMemory] Summary updated for ${chapterId}: ${summary.slice(0, 60)}...`);
-                }
-            })
-            .catch(err => console.warn('[ContextMemory] Summary update failed:', err));
+                })
+                .catch((err) => {
+                    if (err.name !== 'AbortError') {
+                        console.warn('[ContextMemory] Summary update failed:', err);
+                    }
+                })
+                .finally(() => {
+                    clearTimeout(timeoutId);
+                    if (summaryAbortRef.current === controller) {
+                        summaryAbortRef.current = null;
+                    }
+                });
+        }, SUMMARY_DEBOUNCE_MS);
     }, [projectId]);
+
+    useEffect(() => {
+        return () => {
+            if (summaryTimeoutRef.current) {
+                clearTimeout(summaryTimeoutRef.current);
+            }
+            if (summaryAbortRef.current) {
+                summaryAbortRef.current.abort();
+            }
+        };
+    }, []);
 
     // --- NEW: CREATE CHAPTER ---
     const createChapter = async (title = 'Bab Baru') => {
@@ -411,7 +483,10 @@ export function ProjectProvider({ children }) {
     // Load initial project from URL or LocalStorage
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        const savedId = params.get('id') || localStorage.getItem('last_active_project_id');
+        const savedId =
+            params.get('id') ||
+            params.get('project_id') ||
+            localStorage.getItem('last_active_project_id');
 
         if (savedId && savedId !== 'undefined' && savedId !== 'null') {
             loadProject(savedId);

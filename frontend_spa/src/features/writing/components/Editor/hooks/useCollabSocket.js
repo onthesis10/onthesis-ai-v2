@@ -1,7 +1,56 @@
 import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+function isLoopbackHost(hostname = '') {
+    return LOOPBACK_HOSTS.has(hostname);
+}
+
+function getDefaultBackendOrigin() {
+    if (typeof window === 'undefined') {
+        return 'http://localhost:5000';
+    }
+
+    const { origin, protocol, hostname } = window.location;
+
+    if (import.meta.env.DEV) {
+        return `${protocol}//${hostname}:5000`;
+    }
+
+    return origin;
+}
+
+function resolveBackendUrl() {
+    const fallbackOrigin = getDefaultBackendOrigin();
+    const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+
+    if (!configuredUrl) {
+        return fallbackOrigin;
+    }
+
+    try {
+        const parsedUrl = new URL(configuredUrl, fallbackOrigin);
+
+        if (typeof window !== 'undefined') {
+            const currentHost = window.location.hostname;
+            const configuredIsLoopback = isLoopbackHost(parsedUrl.hostname);
+            const currentIsLoopback = isLoopbackHost(currentHost);
+
+            // Prevent production/LAN builds from being pinned to localhost.
+            if (configuredIsLoopback && !currentIsLoopback) {
+                return fallbackOrigin;
+            }
+        }
+
+        return parsedUrl.origin;
+    } catch (error) {
+        console.warn('[CollabSocket] Invalid VITE_API_URL, falling back to detected backend origin.', error);
+        return fallbackOrigin;
+    }
+}
+
+const BACKEND_URL = resolveBackendUrl();
 
 export function useCollabSocket(documentId, userId) {
     const [isConnected, setIsConnected] = useState(false);
@@ -13,6 +62,7 @@ export function useCollabSocket(documentId, userId) {
 
         // Establish connection to the /collab namespace
         socketRef.current = io(`${BACKEND_URL}/collab`, {
+            path: '/socket.io',
             reconnectionAttempts: 10,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
@@ -25,7 +75,14 @@ export function useCollabSocket(documentId, userId) {
         const socket = socketRef.current;
 
         socket.on('connect_error', (err) => {
-            console.error('[CollabSocket] Connection error:', err.message, err.description);
+            console.error('[CollabSocket] Connection error:', {
+                message: err.message,
+                description: err.description || null,
+                backendUrl: BACKEND_URL,
+                pageUrl: typeof window !== 'undefined' ? window.location.href : null,
+                documentId,
+                userId: userId || 'Anonymous'
+            });
         });
 
         socket.on('reconnect_attempt', (attempt) => {

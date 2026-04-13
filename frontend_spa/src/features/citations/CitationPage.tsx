@@ -57,17 +57,43 @@ function CitationPageContent() {
     // --- HANDLERS ---
     const handleCreateProject = async (e: React.FormEvent) => {
         e.preventDefault();
-        try { await citationService.createProject(newProjectTitle); setNewProjectTitle(''); setIsProjectModalOpen(false); success('Project created'); } catch (err) { error('Failed'); }
+        try {
+            const result = await citationService.createProject(newProjectTitle);
+            if (result?.project) {
+                setProjects((prev) => [result.project, ...prev]);
+                setActiveProjectId(result.project.id);
+            }
+            setNewProjectTitle('');
+            setIsProjectModalOpen(false);
+            success('Project created');
+        } catch (err) {
+            error('Failed');
+        }
     };
     const handleDeleteProject = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
-        if (window.confirm('Delete project?')) { await citationService.deleteProject(id); if (activeProjectId === id) setActiveProjectId(null); success('Deleted'); }
+        if (window.confirm('Delete project?')) {
+            await citationService.deleteProject(id);
+            setProjects((prev) => prev.filter((project) => project.id !== id));
+            setCitations((prev) => prev.filter((citation) => citation.projectId !== id));
+            if (activeProjectId === id) setActiveProjectId(null);
+            success('Deleted');
+        }
     };
     const handleAddReference = async (data: any) => {
         if (!activeProjectId) return error('Select project');
-        await citationService.addCitation({ ...data, projectId: activeProjectId }); success('Added');
+        const result = await citationService.addCitation({ ...data, projectId: activeProjectId });
+        if (result?.citation) {
+            setCitations((prev) => [result.citation, ...prev]);
+        }
+        success('Added');
     };
-    const handleDeleteReference = async (id: string) => { if (window.confirm('Delete?')) await citationService.deleteCitation(id); };
+    const handleDeleteReference = async (id: string) => {
+        if (window.confirm('Delete?')) {
+            await citationService.deleteCitation(id);
+            setCitations((prev) => prev.filter((citation) => citation.id !== id));
+        }
+    };
     const handleCopyReference = (ref: Citation) => { navigator.clipboard.writeText(`${ref.author} (${ref.year}). ${ref.title}.`); success('Copied'); };
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0]) info('Processing PDF...'); };
 

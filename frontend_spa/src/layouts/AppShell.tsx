@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useThemeStore } from '@/store/themeStore';
-import { authenticateWithBackendToken } from '@/lib/firebase';
 
 /**
  * AppShell — Top-level layout.
@@ -22,11 +21,14 @@ export function AppShell() {
     useEffect(() => {
         const token = window.__FIREBASE_TOKEN__;
         if (token) {
-            authenticateWithBackendToken(token)
+            import('@/lib/firebase')
+                .then(({ authenticateWithBackendToken }) =>
+                    authenticateWithBackendToken(token)
+                )
                 .then(user => {
                     console.log('[AppShell] Auth success:', user?.uid);
                     // Optional: clear token to separate concerns, though not strictly required
-                    // window.__FIREBASE_TOKEN__ = undefined; 
+                    // window.__FIREBASE_TOKEN__ = undefined;
                 })
                 .catch(err => {
                     console.error('[AppShell] Auth failed:', err);

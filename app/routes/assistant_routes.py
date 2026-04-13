@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # Load Environment Variables
 load_dotenv()
 
-from flask import Blueprint, render_template, request, jsonify, Response, stream_with_context, send_file, current_app
+from flask import Blueprint, render_template, request, jsonify, Response, stream_with_context, send_file, current_app, redirect, url_for
 from flask_login import login_required, current_user
 from firebase_admin import firestore
 from pypdf import PdfReader
@@ -33,17 +33,101 @@ from . import assistant_bp
 from . import assistant_bp
 logger = logging.getLogger(__name__)
 
-_orchestrator = None
 _agent_supervisor = None
 
+LEGACY_WRITING_REMOVAL_PAYLOAD = {
+    "error": "LEGACY_WRITING_ROUTE_REMOVED",
+    "message": "Route writing lama sudah dinonaktifkan. Gunakan runtime blueprint baru melalui /api/agent/run atau halaman /writing.",
+    "preferred_route": "/api/agent/run",
+    "preferred_page": "/writing",
+}
 
-def get_orchestrator():
-    global _orchestrator
-    if _orchestrator is None:
-        from app.orchestrator.core import AcademicOrchestrator
-        _orchestrator = AcademicOrchestrator()
-    return _orchestrator
 
+def _serialize_firestore_value(value):
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+    if hasattr(value, "to_datetime"):
+        try:
+            return value.to_datetime().isoformat()
+        except Exception:
+            return str(value)
+    return value
+
+
+def _serialize_project_record(doc_id: str, data: dict) -> dict:
+    created_at = data.get("createdAt") or data.get("created_at")
+    updated_at = data.get("lastUpdated") or data.get("updatedAt") or data.get("updated_at")
+    end_date = data.get("endDate") or data.get("end_date")
+    return {
+        "id": doc_id,
+        "userId": data.get("userId"),
+        "title": data.get("title", "Tanpa Judul"),
+        "description": data.get("description", ""),
+        "problem_statement": data.get("problem_statement", ""),
+        "methodology": data.get("methodology", ""),
+        "variables": data.get("variables", ""),
+        "content": data.get("content", ""),
+        "status": data.get("status", "DRAFT"),
+        "progress": int(data.get("progress", 0) or 0),
+        "createdAt": _serialize_firestore_value(created_at),
+        "created_at": _serialize_firestore_value(created_at),
+        "lastUpdated": _serialize_firestore_value(updated_at),
+        "updatedAt": _serialize_firestore_value(updated_at),
+        "updated_at": _serialize_firestore_value(updated_at),
+        "endDate": _serialize_firestore_value(end_date),
+        "end_date": _serialize_firestore_value(end_date),
+    }
+
+
+def _serialize_citation_record(doc_id: str, data: dict) -> dict:
+    created_at = data.get("createdAt") or data.get("created_at")
+    return {
+        "id": doc_id,
+        "projectId": data.get("projectId", ""),
+        "userId": data.get("userId", ""),
+        "type": data.get("type", ""),
+        "title": data.get("title", ""),
+        "author": data.get("author", ""),
+        "year": str(data.get("year", "") or ""),
+        "journal": data.get("journal", ""),
+        "publisher": data.get("publisher", ""),
+        "url": data.get("url", ""),
+        "doi": data.get("doi", ""),
+        "volume": data.get("volume", ""),
+        "issue": data.get("issue", ""),
+        "pages": data.get("pages", ""),
+        "notes": data.get("notes", ""),
+        "pdfUrl": data.get("pdfUrl", ""),
+        "createdAt": _serialize_firestore_value(created_at),
+        "created_at": _serialize_firestore_value(created_at),
+    }
+
+
+def _build_project_write_payload(payload: dict, user_id: str, include_created_at: bool = False) -> dict:
+    now = firestore.SERVER_TIMESTAMP
+    write_payload = {
+        "userId": user_id,
+        "title": str(payload.get("title") or "Proyek Baru").strip() or "Proyek Baru",
+        "description": str(payload.get("description") or "").strip(),
+        "problem_statement": str(payload.get("problem_statement") or "").strip(),
+        "methodology": str(payload.get("methodology") or "").strip(),
+        "variables": payload.get("variables") or "",
+        "content": payload.get("content") or "",
+        "status": str(payload.get("status") or "DRAFT").strip() or "DRAFT",
+        "progress": int(payload.get("progress", 0) or 0),
+        "updated_at": now,
+        "updatedAt": now,
+        "lastUpdated": now,
+    }
+    if payload.get("endDate") is not None:
+        write_payload["endDate"] = payload.get("endDate")
+    if include_created_at:
+        write_payload["created_at"] = now
+        write_payload["createdAt"] = now
+    return write_payload
 
 def get_agent_supervisor():
     global _agent_supervisor
@@ -51,6 +135,18 @@ def get_agent_supervisor():
         from app.agent.supervisor import SupervisorAgent
         _agent_supervisor = SupervisorAgent()
     return _agent_supervisor
+
+
+def _legacy_writing_route_removed():
+    return jsonify(dict(LEGACY_WRITING_REMOVAL_PAYLOAD)), 410
+
+
+def _redirect_legacy_writing_page():
+    project_id = request.args.get("id") or request.args.get("project_id")
+    destination = url_for("main.writing")
+    if project_id:
+        destination = f"{destination}?id={urllib.parse.quote(str(project_id))}"
+    return redirect(destination, code=302)
 
 
 def _legacy_generator_task_to_agent_prompt(task_type: str, data: dict, thesis_context_str: str = "") -> str:
@@ -205,40 +301,14 @@ def increment_limit(user, limit_type='generator'):
 @assistant_bp.route('/writing-assistant')
 @login_required
 def writing_assistant():
-    """Halaman utama Writing Studio (React App Wrapper)."""
-    project_id = request.args.get('id')
-    project = None
-
-    try:
-        if project_id:
-            doc_ref = app.firestore_db.collection('projects').document(project_id)
-            doc = doc_ref.get()
-            # Validasi kepemilikan project
-            if doc.exists and doc.to_dict().get('userId') == str(current_user.id):
-                project = doc.to_dict()
-                project['id'] = doc.id
-    except Exception as e:
-        logger.error(f"Page Load Error: {e}")
-
-    return render_template('writing_assistant.html', project=project)
+    """Legacy page alias. Redirect permanently to the SPA Writing Studio."""
+    return _redirect_legacy_writing_page()
 
 @assistant_bp.route('/writing-studio')
 @login_required
 def writing_studio_page():
-    """Halaman Baru: Thesis Writing Studio (Split View)."""
-    # Kita reuse template yang sama karena React Router yang akan handle bedanya
-    project_id = request.args.get('id')
-    project = None
-    try:
-        if project_id:
-            doc_ref = app.firestore_db.collection('projects').document(project_id)
-            doc = doc_ref.get()
-            if doc.exists and doc.to_dict().get('userId') == str(current_user.id):
-                project = doc.to_dict()
-                project['id'] = doc.id
-    except Exception: pass
-
-    return render_template('writing_assistant.html', project=project)
+    """Legacy page alias. Redirect permanently to the SPA Writing Studio."""
+    return _redirect_legacy_writing_page()
 
 @assistant_bp.route('/generator-kajian-teori')
 @login_required
@@ -262,20 +332,31 @@ def thesis_defense_page():
 def api_create_project():
     """Membuat project baru."""
     try:
-        new_project = {
-            'userId': str(current_user.id),
-            'title': 'Proyek Baru',
-            'problem_statement': '',
-            'methodology': '',
-            'variables': '',
-            'content': '', 
-            'created_at': firestore.SERVER_TIMESTAMP,
-            'updated_at': firestore.SERVER_TIMESTAMP
-        }
+        new_project = _build_project_write_payload({}, str(current_user.id), include_created_at=True)
         update_time, project_ref = app.firestore_db.collection('projects').add(new_project)
         return jsonify({'status': 'success', 'projectId': project_ref.id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@assistant_bp.route('/api/projects', methods=['POST'])
+@login_required
+def create_project():
+    """Create project melalui backend API canonical."""
+    try:
+        payload = request.get_json() or {}
+        new_project = _build_project_write_payload(payload, str(current_user.id), include_created_at=True)
+        _update_time, project_ref = app.firestore_db.collection('projects').add(new_project)
+        snapshot = project_ref.get()
+        data = snapshot.to_dict() if snapshot.exists else new_project
+        return jsonify({
+            'status': 'success',
+            'projectId': project_ref.id,
+            'project': _serialize_project_record(project_ref.id, data),
+        }), 201
+    except Exception as e:
+        logger.error(f"Create Project Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @assistant_bp.route('/api/projects', methods=['GET'])
 @login_required
@@ -289,16 +370,10 @@ def get_user_projects():
         projects = []
         for doc in docs:
             d = doc.to_dict()
-            projects.append({
-                'id': doc.id,
-                'title': d.get('title', 'Tanpa Judul'),
-                'updated_at': d.get('updated_at', ''),
-                'progress': d.get('progress', 0),
-                'status': d.get('status', 'DRAFT')
-            })
+            projects.append(_serialize_project_record(doc.id, d))
         
         # Sort client-side karena firestore composite index kadang ribet
-        projects.sort(key=lambda x: str(x['updated_at']), reverse=True)
+        projects.sort(key=lambda x: str(x.get('lastUpdated') or x.get('updated_at') or ''), reverse=True)
             
         return jsonify({'status': 'success', 'projects': projects})
     except Exception as e:
@@ -320,8 +395,7 @@ def get_project_details(project_id):
         if data.get('userId') != str(current_user.id):
             return jsonify({'error': 'Unauthorized'}), 403
             
-        data['id'] = doc.id
-        return jsonify({'status': 'success', 'project': data})
+        return jsonify({'status': 'success', 'project': _serialize_project_record(doc.id, data)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -339,18 +413,101 @@ def update_project(project_id):
         if doc.to_dict().get('userId') != str(current_user.id):
             return jsonify({'error': 'Unauthorized'}), 403
             
-        # Update timestamp
-        data['updated_at'] = firestore.SERVER_TIMESTAMP
-        doc_ref.update(data)
+        write_payload = _build_project_write_payload(data, str(current_user.id), include_created_at=False)
+        doc_ref.set(write_payload, merge=True)
         
-        return jsonify({'status': 'success'})
+        updated_doc = doc_ref.get()
+        return jsonify({
+            'status': 'success',
+            'project': _serialize_project_record(project_id, updated_doc.to_dict() if updated_doc.exists else write_payload),
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@assistant_bp.route('/api/projects/<project_id>', methods=['DELETE'])
+@login_required
+def delete_project(project_id):
+    """Delete project dan referensi terkait via backend API."""
+    try:
+        doc_ref = app.firestore_db.collection('projects').document(project_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return jsonify({'error': 'Project not found'}), 404
+        if doc.to_dict().get('userId') != str(current_user.id):
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        citations = (
+            app.firestore_db.collection('citations')
+            .where('projectId', '==', project_id)
+            .where('userId', '==', str(current_user.id))
+            .stream()
+        )
+        for citation_doc in citations:
+            citation_doc.reference.delete()
+
+        doc_ref.delete()
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        logger.error(f"Delete Project Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 # ==============================================================================
 # BAGIAN 4: API REFERENCES & CITATIONS
 # ==============================================================================
+
+@assistant_bp.route('/api/citations', methods=['GET'])
+@login_required
+def get_user_citations():
+    """List semua citation milik user, opsional filter per project."""
+    try:
+        project_id = request.args.get('projectId', '').strip()
+        query_ref = app.firestore_db.collection('citations').where('userId', '==', str(current_user.id))
+        if project_id:
+            query_ref = query_ref.where('projectId', '==', project_id)
+
+        docs = query_ref.stream()
+        citations = [_serialize_citation_record(doc.id, doc.to_dict() or {}) for doc in docs]
+        citations.sort(key=lambda x: str(x.get('createdAt') or ''), reverse=True)
+        return jsonify({'status': 'success', 'citations': citations}), 200
+    except Exception as e:
+        logger.error(f"List Citations Error: {e}")
+        return jsonify({'status': 'error', 'citations': [], 'message': str(e)}), 500
+
+
+@assistant_bp.route('/api/citations', methods=['POST'])
+@login_required
+def create_citation():
+    """Create citation lewat backend canonical API."""
+    try:
+        ref_data = request.get_json() or {}
+        project_id = str(ref_data.get('projectId') or '').strip()
+        if not project_id:
+            return jsonify({'status': 'error', 'message': 'projectId wajib diisi'}), 400
+
+        proj_ref = app.firestore_db.collection('projects').document(project_id)
+        proj = proj_ref.get()
+        if not proj.exists or proj.to_dict().get('userId') != str(current_user.id):
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+        ref_data['projectId'] = project_id
+        ref_data['userId'] = str(current_user.id)
+        ref_data['createdAt'] = firestore.SERVER_TIMESTAMP
+        ref_data.pop('id', None)
+
+        _update_time, doc_ref = app.firestore_db.collection('citations').add(ref_data)
+        doc_ref.update({'id': doc_ref.id})
+        snapshot = doc_ref.get()
+        return jsonify({
+            'status': 'success',
+            'message': 'Referensi tersimpan',
+            'id': doc_ref.id,
+            'citation': _serialize_citation_record(doc_ref.id, snapshot.to_dict() if snapshot.exists else ref_data),
+        }), 201
+    except Exception as e:
+        logger.error(f"Create Citation Error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @assistant_bp.route('/api/project/<project_id>/references/add', methods=['POST'])
 @login_required
@@ -388,6 +545,24 @@ def add_project_reference(project_id):
         logger.error(f"Add Reference Error: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@assistant_bp.route('/api/citations/<citation_id>', methods=['DELETE'])
+@login_required
+def delete_citation(citation_id):
+    """Delete citation lewat backend canonical API."""
+    try:
+        doc_ref = app.firestore_db.collection('citations').document(citation_id)
+        doc = doc_ref.get()
+        if not doc.exists:
+            return jsonify({'error': 'Not found'}), 404
+        if doc.to_dict().get('userId') != str(current_user.id):
+            return jsonify({'error': 'Unauthorized'}), 403
+        doc_ref.delete()
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        logger.error(f"Delete Citation Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @assistant_bp.route('/api/references/delete', methods=['POST'])
 @login_required
 def delete_reference():
@@ -419,93 +594,7 @@ def delete_reference():
 @login_required
 @limiter.limit("13 per minute")
 def api_writing_assistant():
-    """
-    ENDPOINT GENERATOR UTAMA (BAB, OUTLINE, PARAGRAF, DLL).
-    Mendukung Streaming & Auto-Context Injection dari Project.
-    """
-    try:
-        # 1. CEK LIMIT GENERATOR (Max 3x untuk Free User)
-        allowed, msg = check_limits(current_user, 'generator')
-        if not allowed:
-            return jsonify({'error': 'LIMIT_REACHED', 'message': msg}), 403
-
-        req_data = request.get_json()
-        if not req_data:
-            return jsonify({'error': 'No input data'}), 400
-
-        # Persiapan Data Input
-        input_payload = req_data.get('data', {})
-        project_id = input_payload.get('projectId') or req_data.get('projectId')
-
-        # 2. AUTO-LOAD CONTEXT DARI FIRESTORE
-        # Jika ada project ID, kita ambil data skripsi user untuk dijadikan konteks AI
-        if project_id:
-            try:
-                doc_ref = app.firestore_db.collection('projects').document(project_id)
-                doc = doc_ref.get()
-                
-                if doc.exists:
-                    p_data = doc.to_dict()
-                    # Inject field ke payload AI
-                    input_payload['context_title'] = p_data.get('title', '')
-                    input_payload['context_problem'] = p_data.get('problem_statement', '')
-                    input_payload['context_method'] = p_data.get('methodology', '')
-                    input_payload['context_variables'] = p_data.get('variables_indicators', p_data.get('variables', ''))
-                    input_payload['context_hypothesis'] = p_data.get('hypothesis', '')
-                    input_payload['context_objectives'] = p_data.get('research_objectives', '')
-                    input_payload['context_framework'] = p_data.get('theoretical_framework', '')
-                    
-                    # Update request data dengan payload yang sudah diperkaya
-                    req_data['data'] = input_payload
-                    logger.info(f"Context loaded for Project: {project_id}")
-            except Exception as db_err:
-                logger.warning(f"Context Auto-Load Failed (Non-Fatal): {db_err}")
-
-        # 3. PANGGIL ORCHESTRATOR (STREAMING)
-        # Menggantikan AIService.writing_assistant_stream
-        
-        # Prepare context data
-        context_data = req_data.get('data', {})
-        # Ensure context data has project ID if not already inside 'data'
-        if project_id and 'projectId' not in context_data:
-            context_data['projectId'] = project_id
-            
-        # Determine mode based on task or request
-        # For writing assistant, we use 'writing' mode
-        # Mapping task type from frontend to orchestrator mode/tool logic if needed
-        # For now, we pass the task type inside context_data and let WritingMode handle it
-        
-        result = get_orchestrator().process_request(
-            user_id=current_user.id,
-            message=req_data.get('data', {}).get('content', '') or req_data.get('message', ''),
-            context_data=context_data,
-            mode_name='writing'
-        )
-
-        # 4. CATAT PEMAKAIAN (INCREMENT)
-        # Kita catat penggunaan setelah berhasil memanggil service
-        increment_limit(current_user, 'generator')
-
-        # 5. HANDLE RETURN TYPE
-        
-        # KASUS A: Jika hasil berupa Dictionary (Biasanya dari tools non-stream)
-        if isinstance(result, dict):
-            return jsonify(result), 200
-        
-        # KASUS B: Jika hasil berupa String (Legacy Code)
-        if isinstance(result, str):
-            return jsonify({'generated_content': result}), 200
-
-        # KASUS C: Jika hasil berupa Generator/Stream (Default Behavior)
-        if hasattr(result, '__iter__'):
-            return Response(stream_with_context(result), mimetype='text/html')
-
-        # Fallback terakhir
-        return jsonify({'generated_content': str(result)}), 200
-
-    except Exception as e:
-        logger.error(f"Writing API Error: {e}")
-        return jsonify({'error': str(e)}), 500
+    return _legacy_writing_route_removed()
 
 
 # ==============================================================================
@@ -516,50 +605,7 @@ def api_writing_assistant():
 @login_required
 @limiter.limit("13 per minute")
 def chat_with_ai_stream():
-    """
-    ENDPOINT CHAT KHUSUS (LIMIT 4x UNTUK FREE USER).
-    Menggunakan limitasi kata max 200 (diatur di ai_service.py).
-    """
-    try:
-        # 1. CEK LIMIT CHAT
-        allowed, msg = check_limits(current_user, 'chat')
-        if not allowed:
-            return jsonify({'error': 'LIMIT_REACHED', 'message': msg}), 403
-
-        data = request.get_json()
-        
-        # 2. BUNGKUS DATA SESUAI FORMAT SERVICE
-        # Kita set task='chat' secara eksplisit agar masuk logika prompt limit 200 kata di ai_service
-        wrapper_data = {
-            'task': 'chat',
-            'data': {
-                'message': data.get('message'),
-                'context': data.get('context', ''), 
-                'projectId': data.get('projectId'),
-                'context_title': data.get('context_title', '') # Opsional
-            }
-        }
-        
-        # 3. PANGGIL ORCHESTRATOR (STREAMING)
-        # Unified call for Chat
-        
-        # Prepare context data
-        context_data = wrapper_data.get('data', {})
-        
-        result = get_orchestrator().process_request(
-            user_id=current_user.id,
-            message=data.get('message', ''),
-            context_data=context_data,
-            mode_name=data.get('mode', 'writing')
-        )
-        
-        # 4. INCREMENT LIMIT CHAT
-        increment_limit(current_user, 'chat')
-
-        return Response(stream_with_context(result), mimetype='text/plain')
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return _legacy_writing_route_removed()
 
 # Endpoint Chat Alias (untuk kompatibilitas frontend lama)
 # Endpoint Chat Alias (Hybrid: Page vs API)
@@ -567,9 +613,8 @@ def chat_with_ai_stream():
 @login_required
 def chat_hybrid_route(): 
     if request.method == 'GET':
-        # Serve the React App for /chat route
-        return render_template('writing_assistant.html', project=None)
-    return chat_with_ai_stream()
+        return _redirect_legacy_writing_page()
+    return _legacy_writing_route_removed()
 
 @assistant_bp.route('/api/assistant/chat/copilot', methods=['POST'])
 @login_required
@@ -626,185 +671,25 @@ def chat_copilot():
 @login_required
 @limiter.limit("13 per minute")
 def api_generate_outline():
-    """Generate Outline Skripsi (Direct Call to Utils)."""
-    try:
-        # 1. Cek Limit
-        allowed, msg = check_limits(current_user, 'generator')
-        if not allowed: 
-            return jsonify({'error': 'LIMIT_REACHED', 'message': msg}), 403
-
-        # 2. Ambil Data
-        data = request.get_json() or {}
-        
-        # 3. Construct Project Context Manual
-        # Kita ambil judul dari payload frontend (judul_penelitian) atau default
-        project_context = {
-            'title': data.get('judul_penelitian', 'Topik Skripsi'),
-            'problem_statement': 'Generate Outline Mode',
-            'methodology': data.get('methodology', 'Umum')
-        }
-        
-        # 4. Panggil AI Utils LANGSUNG (Bypass AIService)
-        # Force task_type='generate_outline'
-        stream_result = ai_utils.generate_academic_draft_stream(
-            user=current_user,
-            task_type='generate_outline',  # <--- KITA PAKSA DISINI
-            input_data=data,
-            project_context=project_context,
-            selected_model='free_standard'
-        )
-        
-        # 5. Consume Stream & Bersihkan Output
-        full_text = ""
-        for chunk in stream_result:
-            if isinstance(chunk, bytes):
-                full_text += chunk.decode('utf-8')
-            else:
-                full_text += str(chunk)
-        
-        # 6. Parse JSON dengan Aman
-        try:
-            # Helper ini akan membuang teks "Baik, berikut..." dan ambil JSON-nya saja
-            clean_text = ai_utils.clean_json_output(full_text)
-            outline_json = json.loads(clean_text)
-            
-            increment_limit(current_user, 'generator')
-            return jsonify(outline_json)
-            
-        except json.JSONDecodeError:
-            logger.error(f"Outline Parse Error. Raw: {full_text}")
-            # Fallback darurat: jika gagal parse, kirim error biar frontend tau
-            return jsonify({
-                'error': 'Gagal format JSON',
-                'raw': full_text
-            }), 500
-
-    except Exception as e:
-        logger.error(f"Generate Outline Error: {e}")
-        return jsonify({'error': str(e)}), 500
+    return _legacy_writing_route_removed()
 
 @assistant_bp.route('/api/paraphrase', methods=['POST'])
 @login_required
 @limiter.limit("13 per minute")
 def paraphrase():
-    """API Streaming Paraphrase."""
-    # Paraphrase masuk kuota generator
-    allowed, msg = check_limits(current_user, 'generator')
-    if not allowed:
-        return jsonify({'error': 'LIMIT_REACHED', 'message': msg}), 403
-
-    data = request.get_json()
-    text = data.get('text')
-    style = data.get('style', 'academic')
-    
-    if not text: return jsonify({'error': 'Text is empty'}), 400
-
-    wrapper_data = {
-        'task': 'paraphrase',
-        'data': {
-            'content': text,
-            'style': style
-        }
-    }
-
-    increment_limit(current_user, 'generator')
-
-    result = AIService.writing_assistant_stream(current_user, wrapper_data)
-    return Response(stream_with_context(result), mimetype='text/plain')
+    return _legacy_writing_route_removed()
 
 @assistant_bp.route('/expand-text', methods=['POST'])
 @login_required
 @limiter.limit("13 per minute")
 def expand_text_endpoint():
-    """API Streaming Magic Expand."""
-    allowed, msg = check_limits(current_user, 'generator')
-    if not allowed: return jsonify({'error': 'LIMIT_REACHED', 'message': msg}), 403
-
-    data = request.get_json()
-    text = data.get('text')
-    project_id = data.get('projectId')
-    
-    if not text: return jsonify({'error': 'Text is empty'}), 400
-
-    # Optional: Ambil referensi dari project untuk memperkaya expand
-    context_refs_str = ""
-    if project_id:
-        try:
-            refs_query = app.firestore_db.collection('citations')\
-                .where('projectId', '==', project_id)\
-                .limit(5).stream()
-            
-            ref_list = []
-            for doc in refs_query:
-                d = doc.to_dict()
-                ref_list.append(f"- {d.get('title')} ({d.get('author')}, {d.get('year')})")
-            
-            if ref_list:
-                context_refs_str = "\n".join(ref_list)
-        except Exception as e:
-            logger.error(f"Context Ref Error: {e}")
-
-    wrapper_data = {
-        'task': 'expand_text',
-        'data': {
-            'content': text,
-            'context': context_refs_str
-        }
-    }
-
-    increment_limit(current_user, 'generator')
-
-    result = AIService.writing_assistant_stream(current_user, wrapper_data)
-    return Response(stream_with_context(result), mimetype='text/plain')
+    return _legacy_writing_route_removed()
 
 @assistant_bp.route('/api/ai/edit-text', methods=['POST'])
 @login_required
 @limiter.limit("13 per minute")
 def ai_edit_text():
-    """Endpoint untuk Floating Toolbar (Shorten, Formalize, Expand, dll)."""
-    try:
-        allowed, msg = check_limits(current_user, 'generator')
-        if not allowed: return jsonify({'error': 'LIMIT_REACHED', 'message': msg}), 403
-
-        data = request.get_json()
-        selected_text = data.get('text', '')
-        mode = data.get('mode', 'paraphrase') 
-        should_stream = data.get('stream', False)
-        
-        if not selected_text: return jsonify({'error': 'Text empty'}), 400
-        
-        # --- PERBAIKAN DISINI BRO ---
-        # Mapping mode dari Frontend ke task type AI Service
-        task_map = {
-            'shorten': 'shorten_text',
-            'formalize': 'formalize_text',
-            'paraphrase': 'paraphrase',
-            'fix_grammar': 'grammar_check',
-            'expand': 'expand_text'  # <--- INI YG KEMAREN HILANG
-        }
-        
-        # Kalau mode gak ada di map, default ke paraphrase
-        task_type = task_map.get(mode, 'paraphrase')
-
-        wrapper_data = {
-            'task': task_type,
-            'data': {'content': selected_text}
-        }
-        
-        increment_limit(current_user, 'generator')
-        
-        result = AIService.writing_assistant_stream(current_user, wrapper_data)
-
-        # Handle jika frontend minta JSON vs Stream
-        if should_stream:
-            return Response(stream_with_context(result), mimetype='text/plain')
-        else:
-            # Consume stream to string
-            full_text = "".join([chunk for chunk in result])
-            return jsonify({'status': 'success', 'result': full_text})
-
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    return _legacy_writing_route_removed()
 
 
 # ==============================================================================
@@ -1195,187 +1080,13 @@ def logic_check_route():
 @assistant_bp.route('/api/assistant/generate-stream', methods=['POST'])
 @login_required
 def generate_stream_endpoint():
-    """
-    Endpoint khusus untuk Generator Tab baru (Orchestrator).
-    [UPGRADED] Compatibility shim yang sekarang merutekan eksekusi ke SupervisorAgent
-    agar jalur generator lama dan AgentPanel berbagi pipeline yang sama.
-    """
-    try:
-        logger.warning("Legacy generator route hit; prefer /api/agent/run for new writing-agent flows.")
-        # 1. Cek Limit Generator
-        allowed, msg = check_limits(current_user, 'generator')
-        if not allowed:
-            return jsonify({'message': msg}), 403
-
-        # 2. Ambil Data dari Frontend
-        data = request.get_json()
-        if not data:
-            return jsonify({'message': 'No input data'}), 400
-
-        task_type = data.get('task', 'general')
-        project_id = data.get('projectId', '')
-        
-        # 3. THESIS BRAIN: Load Research Graph + Compile Context
-        thesis_context_str = ""
-        graph_validation = None
-        target_chapter = _detect_chapter_from_task(task_type)
-        
-        if project_id:
-            try:
-                from app.api.research_graph_api import _get_or_create_graph
-                from app.engines.thesis_context import ThesisContextCompiler
-                
-                graph = _get_or_create_graph(project_id, str(current_user.id))
-                
-                # Validate before generation
-                graph_validation = ThesisContextCompiler.validate_before_generation(
-                    graph, target_chapter
-                )
-                
-                # Compile full context
-                thesis_context_str = ThesisContextCompiler.compile(
-                    graph, target_chapter, section_type=task_type
-                )
-                
-                logger.info(f"🧠 Thesis Brain loaded for project {project_id} → {target_chapter}")
-                
-            except Exception as brain_err:
-                logger.warning(f"⚠️ Thesis Brain load failed (non-fatal): {brain_err}")
-        
-        # 4. RAG: Retrieve relevant references for this chapter
-        rag_context_str = ""
-        if project_id:
-            try:
-                from app.engines.rag_engine_v2 import build_rag_context_prompt
-                query = data.get('input_text', '') or data.get('context_problem', '') or data.get('context_title', '')
-                if query:
-                    rag_context_str = build_rag_context_prompt(
-                        project_id, query, target_chapter, n_results=5
-                    )
-                    if rag_context_str:
-                        thesis_context_str += f"\n\n{rag_context_str}"
-                        logger.info(f"📚 RAG context injected for {target_chapter}")
-            except Exception as rag_err:
-                logger.warning(f"⚠️ RAG context failed (non-fatal): {rag_err}")
-
-        if not project_id:
-            return jsonify({'message': 'projectId wajib dikirim untuk generator AI'}), 400
-
-        agent_task = _legacy_generator_task_to_agent_prompt(task_type, data, thesis_context_str)
-        supervisor = get_agent_supervisor()
-        user_id = str(current_user.id)
-        user_obj = current_user._get_current_object()
-
-        def emit(event_data: dict) -> str:
-            return f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
-
-        @stream_with_context
-        def generate():
-            from gevent import spawn
-            from gevent.queue import Queue
-
-            event_queue = Queue()
-            worker_state = {}
-            done_sentinel = "__GENERATOR_SHIM_DONE__"
-
-            def on_event(event_type: str, payload: dict):
-                event = {"type": event_type}
-                if isinstance(payload, dict):
-                    event.update(payload)
-                event_queue.put(event)
-
-            runtime_context = dict(data or {})
-            runtime_context["projectId"] = project_id
-            runtime_context["chapterId"] = data.get("chapterId", "")
-            runtime_context["thesis_brain_context"] = thesis_context_str
-            runtime_context["rag_context"] = rag_context_str
-            runtime_context["generator_task_type"] = task_type
-            runtime_context["target_chapter"] = target_chapter
-            runtime_context["_mode"] = data.get("mode", "planning")
-
-            def worker():
-                try:
-                    worker_state["result"] = supervisor.process_request(
-                        user_id=user_id,
-                        message=agent_task,
-                        context=runtime_context,
-                        on_event=on_event,
-                    )
-                    increment_limit(user_obj, 'generator')
-                except Exception as worker_error:
-                    worker_state["error"] = str(worker_error)
-                finally:
-                    event_queue.put({"type": done_sentinel})
-
-            spawn(worker)
-
-            try:
-                emitted_text_delta = False
-                while True:
-                    event = event_queue.get()
-                    if event.get("type") == done_sentinel:
-                        break
-
-                    if event.get("type") == "TEXT_DELTA":
-                        emitted_text_delta = True
-
-                    yield emit(event)
-
-                if worker_state.get("error"):
-                    yield emit({"type": "ERROR", "message": worker_state["error"]})
-                    return
-
-                final_text = worker_state.get("result")
-                if final_text and not emitted_text_delta:
-                    yield emit({"type": "TEXT_DELTA", "delta": str(final_text)})
-
-                yield emit({"type": "DONE"})
-            except Exception as stream_err:
-                logger.error(f"Generator shim stream error: {stream_err}")
-                yield emit({"type": "ERROR", "message": f"Generator shim error: {stream_err}"})
-
-        return Response(
-            generate(),
-            mimetype='text/event-stream',
-            headers={
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'X-Accel-Buffering': 'no',
-                'X-OnThesis-Legacy-Route': 'true',
-                'X-OnThesis-Preferred-Route': '/api/agent/run',
-            }
-        )
-
-    except Exception as e:
-        logger.error(f"Generate Stream Error: {e}")
-        return jsonify({'message': f"Server Error: {str(e)}"}), 500
+    return _legacy_writing_route_removed()
 
 
 @assistant_bp.route('/api/orchestrator/execute', methods=['POST'])
 @login_required
 def orchestrator_execute():
-    """Unified endpoint for orchestrator modes: writing, critique, concept_map, mind_map, sidang_simulation."""
-    try:
-        data = request.get_json() or {}
-        mode = data.get('mode', 'writing')
-        message = data.get('message', '')
-        context_data = data.get('context', {}) or {}
-        if data.get('projectId') and 'projectId' not in context_data:
-            context_data['projectId'] = data.get('projectId')
-
-        result = orchestrator.process_request(
-            user_id=current_user.id,
-            message=message,
-            context_data=context_data,
-            mode_name=mode
-        )
-
-        if hasattr(result, '__iter__') and not isinstance(result, (dict, str, bytes)):
-            return Response(stream_with_context(result), mimetype='text/plain')
-        return jsonify(result if isinstance(result, dict) else {'result': result})
-    except Exception as e:
-        logger.error(f"Orchestrator Execute Error: {e}")
-        return jsonify({'error': str(e)}), 500
+    return _legacy_writing_route_removed()
 
 def _detect_chapter_from_task(task_type: str) -> str:
     """Map task_type to chapter for context compilation"""
