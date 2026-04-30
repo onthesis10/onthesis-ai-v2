@@ -1,10 +1,30 @@
 import io
 import zipfile
+from typing import Optional
 from bs4 import BeautifulSoup
 from flask import current_app
 from app import firestore_db
 
 class ExportService:
+    @staticmethod
+    def _resolve_project_id(project_id: Optional[str], chapter_id: str) -> str:
+        if project_id:
+            return project_id
+
+        matches = []
+        for chapter_doc in firestore_db.collection_group('chapters').stream():
+            if chapter_doc.id != chapter_id:
+                continue
+            project_ref = chapter_doc.reference.parent.parent
+            if project_ref:
+                matches.append(project_ref.id)
+
+        if not matches:
+            raise ValueError("Chapter not found")
+        if len(matches) > 1:
+            raise ValueError("projectId is required because chapter_id is not unique")
+        return matches[0]
+
     @staticmethod
     def _html_to_markdown(html_content: str) -> str:
         """Sederhana merubah HTML ke Markdown."""
@@ -16,6 +36,7 @@ class ExportService:
     @staticmethod
     def export_chapter_to_md(project_id: str, chapter_id: str) -> tuple[bytes, str]:
         """Return (file_bytes, filename)"""
+        project_id = ExportService._resolve_project_id(project_id, chapter_id)
         chap_ref = firestore_db.collection('projects').document(project_id).collection('chapters').document(chapter_id).get()
         if not chap_ref.exists:
             raise ValueError("Chapter not found")
@@ -32,6 +53,7 @@ class ExportService:
     @staticmethod
     def export_chapter_to_docx(project_id: str, chapter_id: str) -> tuple[bytes, str]:
         """Return (file_bytes, filename)"""
+        project_id = ExportService._resolve_project_id(project_id, chapter_id)
         chap_ref = firestore_db.collection('projects').document(project_id).collection('chapters').document(chapter_id).get()
         if not chap_ref.exists:
             raise ValueError("Chapter not found")
