@@ -185,6 +185,8 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
         abortRef.current = new AbortController();
 
         try {
+            const selectedText = options.selectedText || context.selected_text || context.selectedText || '';
+            const targetKey = options.targetKey || context.target_paragraph_key || context.target_key || context.targetKey || '';
             const body = {
                 intent: options.intent || 'general',
                 user_message: task,
@@ -193,8 +195,9 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
                     ...context,
                     file_id: projectId || '',
                     section_id: chapterId || '',
-                    selected_text: options.selectedText || context.selectedText || '',
-                    target_paragraph_key: options.targetKey || context.targetKey || ''
+                    selected_text: selectedText,
+                    target_paragraph_key: targetKey,
+                    target_key: targetKey
                 },
                 projectId: projectId || '',
                 chapterId: chapterId || '',

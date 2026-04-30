@@ -581,21 +581,48 @@ class TaskPlanner:
         req_ctx = memory_context.get("request_context", {})
         return req_ctx if isinstance(req_ctx, dict) else {}
 
-    def _add_editor_insertion_step(self, steps: List[TaskStep], memory_context: Optional[Dict], last_step_id: str) -> List[TaskStep]:
-        """Menambahkan step untuk memasukkan hasil ke Lexical Editor jika ada paragraf aktif."""
+    def _resolve_editor_target(self, memory_context: Optional[Dict]) -> Dict[str, str]:
+        req_ctx = self._get_request_context(memory_context)
         active_paras = []
         active_node = {}
-        if memory_context:
-            active_paras = memory_context.get("active_paragraphs", [])
-            if not active_paras:
-                req_ctx = memory_context.get("request_context", {})
-                active_paras = req_ctx.get("active_paragraphs", [])
-                active_node = req_ctx.get("active_node", {}) if isinstance(req_ctx.get("active_node", {}), dict) else {}
-            else:
-                active_node = memory_context.get("active_node", {}) if isinstance(memory_context.get("active_node", {}), dict) else {}
-        target_para = active_node.get("paraId") or (active_paras[-1].get("paraId") if active_paras else "")
-        
-        if target_para:
+        if isinstance(memory_context, dict):
+            active_paras = memory_context.get("active_paragraphs", []) or req_ctx.get("active_paragraphs", [])
+            active_node = memory_context.get("active_node", {}) if isinstance(memory_context.get("active_node", {}), dict) else {}
+        if not active_node:
+            active_node = req_ctx.get("active_node", {}) if isinstance(req_ctx.get("active_node", {}), dict) else {}
+
+        target_key = (
+            req_ctx.get("target_paragraph_key")
+            or req_ctx.get("target_key")
+            or (memory_context or {}).get("target_paragraph_key", "")
+            or active_node.get("target_key")
+            or active_node.get("nodeKey")
+            or ""
+        )
+        target_para = active_node.get("paraId") or ""
+        if not target_para and active_paras:
+            for para in active_paras:
+                if not isinstance(para, dict):
+                    continue
+                para_key = para.get("nodeKey") or para.get("target_key")
+                if target_key and para_key == target_key:
+                    target_para = para.get("paraId") or ""
+                    break
+            if not target_para:
+                target_para = active_paras[-1].get("paraId", "")
+        if not target_para:
+            target_para = target_key
+
+        return {
+            "target_paragraph_id": target_para or "",
+            "target_paragraph_key": target_key or "",
+            "selected_text": str(req_ctx.get("selected_text") or ""),
+        }
+
+    def _add_editor_insertion_step(self, steps: List[TaskStep], memory_context: Optional[Dict], last_step_id: str) -> List[TaskStep]:
+        """Menambahkan step untuk memasukkan hasil ke Lexical Editor jika ada paragraf aktif."""
+        target = self._resolve_editor_target(memory_context)
+        if target["target_paragraph_id"]:
             for step in steps:
                 if step.step_id == last_step_id:
                     step.output_to = "step_insert"
@@ -607,7 +634,8 @@ class TaskPlanner:
                 input_from=last_step_id,
                 output_to="user",
                 params={
-                    "target_paragraph_id": target_para,
+                    "target_paragraph_id": target["target_paragraph_id"],
+                    "target_paragraph_key": target["target_paragraph_key"],
                     "position": "after",
                     "reason": "Draft otomatis dari Agent."
                 },
@@ -617,19 +645,8 @@ class TaskPlanner:
 
     def _add_editor_replacement_step(self, steps: List[TaskStep], memory_context: Optional[Dict], last_step_id: str) -> List[TaskStep]:
         """Menambahkan step untuk mengganti isi paragraf aktif dengan hasil Lexical Editor."""
-        active_paras = []
-        active_node = {}
-        if memory_context:
-            active_paras = memory_context.get("active_paragraphs", [])
-            if not active_paras:
-                req_ctx = memory_context.get("request_context", {})
-                active_paras = req_ctx.get("active_paragraphs", [])
-                active_node = req_ctx.get("active_node", {}) if isinstance(req_ctx.get("active_node", {}), dict) else {}
-            else:
-                active_node = memory_context.get("active_node", {}) if isinstance(memory_context.get("active_node", {}), dict) else {}
-        target_para = active_node.get("paraId") or (active_paras[-1].get("paraId") if active_paras else "")
-        
-        if target_para:
+        target = self._resolve_editor_target(memory_context)
+        if target["target_paragraph_id"]:
             for step in steps:
                 if step.step_id == last_step_id:
                     step.output_to = "step_replace"
@@ -641,7 +658,9 @@ class TaskPlanner:
                 input_from=last_step_id,
                 output_to="user",
                 params={
-                    "target_paragraph_id": target_para,
+                    "target_paragraph_id": target["target_paragraph_id"],
+                    "target_paragraph_key": target["target_paragraph_key"],
+                    "old_text": target["selected_text"],
                     "reason": "Perbaikan teks otomatis dari Agent."
                 },
                 depends_on=[last_step_id]
