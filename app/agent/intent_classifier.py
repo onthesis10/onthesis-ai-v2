@@ -269,6 +269,7 @@ class IntentClassifier:
             "perbaiki kalimat", "susun ulang"
         ]):
             logger.info("| DEBUG | IntentClassifier -> Matched hardcoded rule: 'rewrite_paragraph'")
+            logger.info("Classified intent: rewrite_paragraph (confidence: 0.98)")
             return {"intent": "rewrite_paragraph", "confidence": 0.98, "key_entities": [], "needs_clarification": False}
 
         if any(kw in msg_lower for kw in [

@@ -199,20 +199,11 @@ class TaskPlanner:
                 agent="writing_agent",
                 tool="rewrite_text",
                 input_from="user",
-                output_to="step_2",
+                output_to="user",
                 params={"style": "academic formal"},
                 depends_on=[]
             ))
-            steps.append(TaskStep(
-                step_id="step_2",
-                agent="writing_agent",
-                tool="polish_academic_tone",
-                input_from="step_1",
-                output_to="user",
-                params={},
-                depends_on=["step_1"]
-            ))
-            steps = self._add_editor_replacement_step(steps, memory_context, "step_2")
+            steps = self._add_editor_replacement_step(steps, memory_context, "step_1")
 
         elif intent == "paraphrase":
             steps.append(TaskStep(
