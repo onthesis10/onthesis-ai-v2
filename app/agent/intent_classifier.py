@@ -261,7 +261,15 @@ class IntentClassifier:
             "cari di google", "cari di internet", "search web", "web search",
             "cari online", "cari artikel terbaru", "browsing", "dari internet"
         ]):
+            logger.info("| DEBUG | IntentClassifier -> Matched hardcoded rule: 'web_search'")
             return {"intent": "web_search", "confidence": 0.97, "key_entities": [], "needs_clarification": False}
+
+        if any(kw in msg_lower for kw in [
+            "tulis ulang", "perbaiki paragraf", "rewrite", "parafrase", "buat lebih formal",
+            "perbaiki kalimat", "susun ulang"
+        ]):
+            logger.info("| DEBUG | IntentClassifier -> Matched hardcoded rule: 'rewrite_paragraph'")
+            return {"intent": "rewrite_paragraph", "confidence": 0.98, "key_entities": [], "needs_clarification": False}
 
         if any(kw in msg_lower for kw in [
             "buatkan bab", "tulis bab lengkap", "generate bab", "buat bab",
@@ -331,6 +339,7 @@ class IntentClassifier:
                 if not clarification_msg:
                     clarification_msg = CLARIFICATION_TEMPLATE
                 
+                logger.info(f"Classified intent: unclear (confidence: {confidence}, needs_clarification: {needs_clarification})")
                 return {
                     "intent": "unclear",
                     "confidence": confidence,
@@ -338,6 +347,7 @@ class IntentClassifier:
                     "raw_result": result
                 }
             
+            logger.info(f"Classified intent: {result.get('intent')} (confidence: {confidence})")
             return result
             
         except json.JSONDecodeError as e:

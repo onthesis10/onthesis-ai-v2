@@ -103,6 +103,7 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
 
             // ── Sprint 5: Handle pending diff from agent ──
             case 'PENDING_DIFF':
+            case 'paragraph_proposed':
                 if (event.diff) {
                     const normalizedDiff = {
                         ...event.diff,
@@ -185,10 +186,19 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
 
         try {
             const body = {
-                task,
-                context,
+                intent: options.intent || 'general',
+                user_message: task,
+                task, // keep for backward compatibility
+                context: {
+                    ...context,
+                    file_id: projectId || '',
+                    section_id: chapterId || '',
+                    selected_text: options.selectedText || context.selectedText || '',
+                    target_paragraph_key: options.targetKey || context.targetKey || ''
+                },
                 projectId: projectId || '',
                 chapterId: chapterId || '',
+                source: options.source || 'chat'
             };
 
             // Include model and mode if provided

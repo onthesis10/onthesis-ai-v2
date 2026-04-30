@@ -35,8 +35,8 @@ export function applyDiffHighlight(editor, diff) {
     editor.update(() => {
         if (diff.type === 'edit') {
             const node = $findEditableNode(diff);
-            if (!node) {
-                console.warn('[DiffBridge] Node not found for edit target:', diff.paraId, diff.target_key);
+            if (!node || !node.isAttached()) {
+                console.warn('[DiffBridge] Node not found or unattached for edit target:', diff.paraId, diff.target_key);
                 return;
             }
 
@@ -58,8 +58,8 @@ export function applyDiffHighlight(editor, diff) {
 
         } else if (diff.type === 'insert') {
             const anchor = $findNodeByParaId(diff.anchorId || diff.paraId);
-            if (!anchor) {
-                console.warn('[DiffBridge] Anchor not found for insert:', diff.anchorId || diff.paraId);
+            if (!anchor || !anchor.isAttached()) {
+                console.warn('[DiffBridge] Anchor not found or unattached for insert:', diff.anchorId || diff.paraId);
                 return;
             }
 
@@ -82,7 +82,7 @@ export function applyDiffHighlight(editor, diff) {
 
         } else if (diff.type === 'delete') {
             const node = $findEditableNode(diff);
-            if (!node) return;
+            if (!node || !node.isAttached()) return;
 
             const oldHtml = diff.old_text || diff.before || _getNodeHtmlContent(editor, node);
 
@@ -113,7 +113,7 @@ export function commitDiff(editor, diff) {
         const root = $getRoot();
         const diffNode = $findDiffBlockByDiffId(root, diff.diffId);
 
-        if (diffNode) {
+        if (diffNode && diffNode.isAttached()) {
             // ── DiffBlockNode exists — replace it with final content ──
             if (diff.type === 'edit' || diff.type === 'insert') {
                 const newPara = $createThesisParagraphNode(diff.paraId);
@@ -129,12 +129,12 @@ export function commitDiff(editor, diff) {
             console.warn('[DiffBridge] DiffBlockNode not found for commit, using fallback for:', diff.diffId);
             if (diff.type === 'edit') {
                 const node = $findEditableNode(diff);
-                if (!node) return;
+                if (!node || !node.isAttached()) return;
                 _replaceNodeContent(editor, node, diff.new_text || diff.after);
 
             } else if (diff.type === 'insert') {
                 const anchor = $findNodeByParaId(diff.anchorId || diff.paraId);
-                if (!anchor) return;
+                if (!anchor || !anchor.isAttached()) return;
                 const newNode = $createThesisParagraphNode(diff.paraId);
                 _injectContentIntoNode(editor, newNode, diff.new_text || diff.after);
                 if (diff.position === 'before') {
@@ -145,7 +145,7 @@ export function commitDiff(editor, diff) {
 
             } else if (diff.type === 'delete') {
                 const node = $findEditableNode(diff);
-                if (node) node.remove();
+                if (node && node.isAttached()) node.remove();
             }
         }
     });
@@ -162,7 +162,7 @@ export function revertDiff(editor, diff) {
         const root = $getRoot();
         const diffNode = $findDiffBlockByDiffId(root, diff.diffId);
 
-        if (diffNode) {
+        if (diffNode && diffNode.isAttached()) {
             if (diff.type === 'edit') {
                 // Restore original paragraph with original content
                 const restoredPara = $createThesisParagraphNode(diff.paraId);
