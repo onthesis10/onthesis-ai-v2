@@ -62,6 +62,49 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
     const abortRef = useRef(null);
     // Bugfix 1: Ref to always hold the latest _handleEvent callback
     const handleEventRef = useRef(null);
+    const currentRequestRef = useRef(null);
+    const generatedTextRef = useRef('');
+    const receivedDiffRef = useRef(false);
+
+    const _applyContextMenuTextAsDiff = useCallback(() => {
+        const requestMeta = currentRequestRef.current;
+        const rewrittenText = generatedTextRef.current.trim();
+        if (
+            !requestMeta ||
+            requestMeta.source !== 'context_menu' ||
+            receivedDiffRef.current ||
+            !requestMeta.selectedText ||
+            !requestMeta.targetKey ||
+            !rewrittenText
+        ) {
+            return;
+        }
+
+        const syntheticDiffId = `context_menu_${Date.now()}`;
+        const syntheticDiff = {
+            diffId: syntheticDiffId,
+            diff_id: syntheticDiffId,
+            type: 'edit',
+            paraId: requestMeta.targetKey,
+            target_key: requestMeta.targetKey,
+            old_text: requestMeta.selectedText,
+            new_text: rewrittenText,
+            reason: 'Hasil revisi dari context menu.',
+        };
+
+        receivedDiffRef.current = true;
+        setPendingDiffs((prev) => [...prev, syntheticDiff]);
+        const editor = _getLexicalEditor(editorRef);
+        if (editor) {
+            try {
+                applyDiffHighlight(editor, syntheticDiff);
+            } catch (e) {
+                console.warn('[AgentLoop] Could not apply context-menu diff fallback:', e);
+            }
+        }
+        generatedTextRef.current = '';
+        setGeneratedText('');
+    }, [editorRef]);
 
     /**
      * Handle a single SSE event.
@@ -105,6 +148,7 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
             case 'PENDING_DIFF':
             case 'paragraph_proposed':
                 if (event.diff) {
+                    receivedDiffRef.current = true;
                     const normalizedDiff = {
                         ...event.diff,
                         diffId: event.diff.diffId || event.diff.diff_id,
@@ -143,10 +187,15 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
                 break;
 
             case 'TEXT_DELTA':
-                setGeneratedText((prev) => prev + (event.delta || ''));
+                setGeneratedText((prev) => {
+                    const next = prev + (event.delta || '');
+                    generatedTextRef.current = next;
+                    return next;
+                });
                 break;
 
             case 'DONE':
+                _applyContextMenuTextAsDiff();
                 setSteps((prev) => [...prev, event]);
                 setAgentState(AGENT_STATES.DONE);
                 break;
@@ -159,7 +208,7 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
             default:
                 console.warn('[AgentLoop] Unknown event type:', type);
         }
-    }, [editorRef]);
+    }, [editorRef, _applyContextMenuTextAsDiff]);
 
     // Bugfix 1: Always keep ref pointing to latest _handleEvent
     handleEventRef.current = _handleEvent;
@@ -175,6 +224,8 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
         setSteps([]);
         setCurrentStep(null);
         setGeneratedText('');
+        generatedTextRef.current = '';
+        receivedDiffRef.current = false;
         setError(null);
         // Don't clear pendingDiffs — let user accept/reject them even across runs
         // setPendingDiffs([]);  // REMOVED: diffs persist until user acts on them
@@ -187,6 +238,11 @@ export function useAgentLoop({ editorRef, projectId, chapterId, onSave } = {}) {
         try {
             const selectedText = options.selectedText || context.selected_text || context.selectedText || '';
             const targetKey = options.targetKey || context.target_paragraph_key || context.target_key || context.targetKey || '';
+            currentRequestRef.current = {
+                source: options.source || 'chat',
+                selectedText,
+                targetKey,
+            };
             const body = {
                 intent: options.intent || 'general',
                 user_message: task,

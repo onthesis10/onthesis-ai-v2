@@ -195,7 +195,15 @@ export default function WritingStudioV2Page() {
         return () => window.removeEventListener('onthesis-editor-context-menu', handler as EventListener);
     }, []);
 
+    const inferContextMenuIntent = (prompt: string) => {
+        const normalized = prompt.toLowerCase();
+        if (normalized.includes('parafrase')) return 'paraphrase';
+        if (normalized.includes('panjangkan') || normalized.includes('kembangkan')) return 'expand_paragraph';
+        return 'rewrite_paragraph';
+    };
+
     const handleContextAction = useCallback((prompt: string, _text: string) => {
+        const intent = inferContextMenuIntent(prompt);
         window.dispatchEvent(new CustomEvent('onthesis-agent-run-request', {
             detail: {
                 task: prompt,
@@ -204,7 +212,7 @@ export default function WritingStudioV2Page() {
                 selectedText: contextMenu.selectedText,
                 targetKey: contextMenu.targetKey,
                 source: 'context_menu',
-                intent: 'rewrite_paragraph' // Added to force rewrite intent
+                intent,
             },
         }));
     }, [projectId, project?.id, activeChapterId, contextMenu.selectedText, contextMenu.targetKey]);

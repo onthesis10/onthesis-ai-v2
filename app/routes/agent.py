@@ -376,6 +376,11 @@ def run_agent_sse():
     if target_paragraph_key:
         context["target_paragraph_key"] = target_paragraph_key
         context["target_key"] = target_paragraph_key
+    source = data.get("source") or context.get("source") or "chat"
+    requested_intent = data.get("intent") or context.get("intent") or ""
+    context["source"] = source
+    if requested_intent and requested_intent != "general":
+        context["requested_intent"] = requested_intent
     project_id = data.get("projectId", "")
     chapter_id = data.get("chapterId", "")
     messages_history = data.get("messages", [])

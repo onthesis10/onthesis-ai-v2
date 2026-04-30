@@ -761,7 +761,18 @@ class SupervisorAgent:
         
         # 3. Intent Classification
         histori = agent_context.get("conversation_history", [])
-        intent_res = self.classifier.classify(message, histori)
+        allowed_requested_intents = {"rewrite_paragraph", "paraphrase", "expand_paragraph"}
+        requested_intent = str((context or {}).get("requested_intent") or "").strip()
+        if requested_intent in allowed_requested_intents and (context or {}).get("source") == "context_menu":
+            intent_res = {
+                "intent": requested_intent,
+                "confidence": 1.0,
+                "key_entities": [],
+                "needs_clarification": False,
+            }
+            logger.info(f"Classified intent: {requested_intent} (confidence: 1.0, source: context_menu)")
+        else:
+            intent_res = self.classifier.classify(message, histori)
         intent = intent_res.get("intent", "unclear")
 
         # Only use fallback keyword matching if the intent is unclear
