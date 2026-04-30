@@ -20,7 +20,7 @@
 //   reason:   string?,         // agent's reasoning
 // }
 
-import { $getRoot, $createTextNode } from 'lexical';
+import { $getRoot, $createTextNode, $getNodeByKey } from 'lexical';
 import { $generateNodesFromDOM, $generateHtmlFromNodes } from '@lexical/html';
 import { ThesisParagraphNode, $createThesisParagraphNode } from '../nodes/ThesisParagraphNode';
 import { $createDiffBlockNode, $isDiffBlockNode, $findDiffBlockByDiffId } from '../nodes/DiffBlockNode.jsx';
@@ -209,17 +209,14 @@ function $findNodeByParaId(paraId) {
 
 function $findNodeByKey(nodeKey) {
     if (!nodeKey) return null;
-    const root = $getRoot();
-    const children = root.getChildren();
-    for (const child of children) {
-        if (child instanceof ThesisParagraphNode) {
-            const key = child.getKey ? child.getKey() : child.__key;
-            if (key === nodeKey) {
-                return child;
-            }
-        }
+    let targetNode = null;
+    try {
+        targetNode = $getNodeByKey(nodeKey);
+    } catch {
+        return null;
     }
-    return null;
+    if (!targetNode || !(targetNode instanceof ThesisParagraphNode)) return null;
+    return targetNode;
 }
 
 function _normalizePlainText(text) {
@@ -248,11 +245,12 @@ function $findNodeByOldText(oldText) {
 }
 
 function $findEditableNode(diff) {
-    return (
-        $findNodeByKey(diff.target_key) ||
-        $findNodeByParaId(diff.paraId) ||
-        $findNodeByOldText(diff.old_text || diff.before)
-    );
+    if (diff.target_key) {
+        const targetNode = $findNodeByKey(diff.target_key);
+        if (targetNode && targetNode.isAttached()) return targetNode;
+        console.warn('[DiffBridge] target_key not found, using text-match fallback');
+    }
+    return $findNodeByParaId(diff.paraId) || $findNodeByOldText(diff.old_text || diff.before);
 }
 
 /**
