@@ -101,6 +101,8 @@ class EditorAgent:
         target_paragraph_id: str,
         new_markdown: str,
         reason: str = "",
+        target_paragraph_key: str = "",
+        old_text: str = "",
         memory: Any = None,
         **kwargs,
     ) -> Dict[str, Any]:
@@ -119,20 +121,25 @@ class EditorAgent:
             return {"error": "target_paragraph_id and new_markdown are required"}
 
         # Cari konten lama dari context
-        old_text = ""
-        target_key = None
+        target_key = target_paragraph_key or None
         if memory and hasattr(memory, "request_context"):
             request_context = memory.request_context
             paragraphs = request_context.get("active_paragraphs", [])
             for p in paragraphs:
-                if p.get("paraId") == target_paragraph_id:
-                    old_text = p.get("content", "")
-                    target_key = p.get("nodeKey") or p.get("target_key")
+                para_key = p.get("nodeKey") or p.get("target_key")
+                if p.get("paraId") == target_paragraph_id or (target_key and para_key == target_key):
+                    old_text = old_text or p.get("content", "")
+                    target_key = target_key or para_key
                     break
             active_node = request_context.get("active_node", {})
-            if isinstance(active_node, dict) and active_node.get("paraId") == target_paragraph_id:
-                target_key = active_node.get("target_key") or active_node.get("nodeKey") or target_key
-                old_text = active_node.get("paragraphText") or old_text
+            if isinstance(active_node, dict) and (
+                active_node.get("paraId") == target_paragraph_id
+                or (target_key and target_key in {active_node.get("target_key"), active_node.get("nodeKey")})
+            ):
+                target_key = target_key or active_node.get("target_key") or active_node.get("nodeKey")
+                old_text = old_text or active_node.get("paragraphText")
+            target_key = target_key or request_context.get("target_paragraph_key") or request_context.get("target_key")
+            old_text = old_text or request_context.get("selected_text", "")
 
         diff_id = f"diff_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}"
 
@@ -346,6 +353,8 @@ class EditorAgent:
                 target_paragraph_id=input_data.get("target_paragraph_id", params.get("target_paragraph_id", "")),
                 new_markdown=input_data.get("new_markdown", params.get("new_markdown", "")),
                 reason=input_data.get("reason", params.get("reason", "")),
+                target_paragraph_key=input_data.get("target_paragraph_key", params.get("target_paragraph_key", "")),
+                old_text=input_data.get("old_text", params.get("old_text", "")),
                 memory=memory,
             )
         # input_data is the new_markdown string
@@ -353,6 +362,8 @@ class EditorAgent:
             target_paragraph_id=params.get("target_paragraph_id", ""),
             new_markdown=str(input_data),
             reason=params.get("reason", ""),
+            target_paragraph_key=params.get("target_paragraph_key", ""),
+            old_text=params.get("old_text", ""),
             memory=memory,
         )
 

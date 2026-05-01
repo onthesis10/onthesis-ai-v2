@@ -9,6 +9,7 @@ import { Check, X, PenLine, Plus, Trash2, ArrowRight } from 'lucide-react';
 // ─── Event names for communication with useAgentLoop ───
 export const DIFF_ACCEPT_EVENT = 'onthesis-diff-accept';
 export const DIFF_REJECT_EVENT = 'onthesis-diff-reject';
+export const DIFF_EDIT_EVENT = 'onthesis-diff-edit';
 
 // ─── Diff type config ───
 const DIFF_CONFIG = {

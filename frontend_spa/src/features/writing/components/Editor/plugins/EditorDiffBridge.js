@@ -20,10 +20,28 @@
 //   reason:   string?,         // agent's reasoning
 // }
 
-import { $getRoot, $createTextNode } from 'lexical';
+import { $getRoot, $createTextNode, $getNodeByKey } from 'lexical';
 import { $generateNodesFromDOM, $generateHtmlFromNodes } from '@lexical/html';
 import { ThesisParagraphNode, $createThesisParagraphNode } from '../nodes/ThesisParagraphNode';
 import { $createDiffBlockNode, $isDiffBlockNode, $findDiffBlockByDiffId } from '../nodes/DiffBlockNode.jsx';
+
+// ─────────────────────────────────────────────
+// Internal: Capture HTML from a node BEFORE mutation.
+// Must be called OUTSIDE editor.update() — uses editor.read().
+// ─────────────────────────────────────────────
+function _captureNodeHtml(editor, diff) {
+    let html = '';
+    try {
+        editor.read(() => {
+            const node = $findEditableNode(diff);
+            if (!node) return;
+            html = $generateHtmlFromNodes(editor, node);
+        });
+    } catch (e) {
+        console.warn('[DiffBridge] Could not capture node HTML:', e);
+    }
+    return html;
+}
 
 // ─────────────────────────────────────────────
 // 1. Apply Diff Highlight → INSERT DiffBlockNode
@@ -32,18 +50,21 @@ import { $createDiffBlockNode, $isDiffBlockNode, $findDiffBlockByDiffId } from '
 export function applyDiffHighlight(editor, diff) {
     if (!editor) return;
 
+    // Capture old HTML BEFORE editor.update() to avoid calling exportDOM / $
+    // functions inside an active mutation context, which triggers Error #19.
+    const oldHtml = diff.old_text || diff.before ||
+        ((diff.type === 'edit' || diff.type === 'delete')
+            ? _captureNodeHtml(editor, diff)
+            : '');
+
     editor.update(() => {
         if (diff.type === 'edit') {
             const node = $findEditableNode(diff);
-            if (!node) {
-                console.warn('[DiffBridge] Node not found for edit target:', diff.paraId, diff.target_key);
+            if (!node || !node.isAttached()) {
+                console.warn('[DiffBridge] Node not found or unattached for edit target:', diff.paraId, diff.target_key);
                 return;
             }
 
-            // Capture original HTML from the node preserving formats
-            const oldHtml = diff.old_text || diff.before || _getNodeHtmlContent(editor, node);
-
-            // Create DiffBlockNode that shows old vs new
             const diffNode = $createDiffBlockNode(
                 diff.diffId,
                 'edit',
@@ -53,27 +74,24 @@ export function applyDiffHighlight(editor, diff) {
                 diff.reason || '',
             );
 
-            // Replace the original paragraph with the diff block
             node.replace(diffNode);
 
         } else if (diff.type === 'insert') {
             const anchor = $findNodeByParaId(diff.anchorId || diff.paraId);
-            if (!anchor) {
-                console.warn('[DiffBridge] Anchor not found for insert:', diff.anchorId || diff.paraId);
+            if (!anchor || !anchor.isAttached()) {
+                console.warn('[DiffBridge] Anchor not found or unattached for insert:', diff.anchorId || diff.paraId);
                 return;
             }
 
-            // Create DiffBlockNode showing the proposed new content
             const diffNode = $createDiffBlockNode(
                 diff.diffId,
                 'insert',
-                '', // no old content for insert
+                '',
                 diff.new_text || diff.after || '',
                 diff.paraId,
                 diff.reason || '',
             );
 
-            // Insert diff block after/before the anchor
             if (diff.position === 'before') {
                 anchor.insertBefore(diffNode);
             } else {
@@ -82,11 +100,8 @@ export function applyDiffHighlight(editor, diff) {
 
         } else if (diff.type === 'delete') {
             const node = $findEditableNode(diff);
-            if (!node) return;
+            if (!node || !node.isAttached()) return;
 
-            const oldHtml = diff.old_text || diff.before || _getNodeHtmlContent(editor, node);
-
-            // Create DiffBlockNode showing what will be deleted
             const diffNode = $createDiffBlockNode(
                 diff.diffId,
                 'delete',
@@ -96,7 +111,6 @@ export function applyDiffHighlight(editor, diff) {
                 diff.reason || '',
             );
 
-            // Replace paragraph with diff block
             node.replace(diffNode);
         }
     });
@@ -113,7 +127,7 @@ export function commitDiff(editor, diff) {
         const root = $getRoot();
         const diffNode = $findDiffBlockByDiffId(root, diff.diffId);
 
-        if (diffNode) {
+        if (diffNode && diffNode.isAttached()) {
             // ── DiffBlockNode exists — replace it with final content ──
             if (diff.type === 'edit' || diff.type === 'insert') {
                 const newPara = $createThesisParagraphNode(diff.paraId);
@@ -129,12 +143,12 @@ export function commitDiff(editor, diff) {
             console.warn('[DiffBridge] DiffBlockNode not found for commit, using fallback for:', diff.diffId);
             if (diff.type === 'edit') {
                 const node = $findEditableNode(diff);
-                if (!node) return;
+                if (!node || !node.isAttached()) return;
                 _replaceNodeContent(editor, node, diff.new_text || diff.after);
 
             } else if (diff.type === 'insert') {
                 const anchor = $findNodeByParaId(diff.anchorId || diff.paraId);
-                if (!anchor) return;
+                if (!anchor || !anchor.isAttached()) return;
                 const newNode = $createThesisParagraphNode(diff.paraId);
                 _injectContentIntoNode(editor, newNode, diff.new_text || diff.after);
                 if (diff.position === 'before') {
@@ -145,7 +159,7 @@ export function commitDiff(editor, diff) {
 
             } else if (diff.type === 'delete') {
                 const node = $findEditableNode(diff);
-                if (node) node.remove();
+                if (node && node.isAttached()) node.remove();
             }
         }
     });
@@ -162,7 +176,7 @@ export function revertDiff(editor, diff) {
         const root = $getRoot();
         const diffNode = $findDiffBlockByDiffId(root, diff.diffId);
 
-        if (diffNode) {
+        if (diffNode && diffNode.isAttached()) {
             if (diff.type === 'edit') {
                 // Restore original paragraph with original content
                 const restoredPara = $createThesisParagraphNode(diff.paraId);
@@ -209,17 +223,14 @@ function $findNodeByParaId(paraId) {
 
 function $findNodeByKey(nodeKey) {
     if (!nodeKey) return null;
-    const root = $getRoot();
-    const children = root.getChildren();
-    for (const child of children) {
-        if (child instanceof ThesisParagraphNode) {
-            const key = child.getKey ? child.getKey() : child.__key;
-            if (key === nodeKey) {
-                return child;
-            }
-        }
+    let targetNode = null;
+    try {
+        targetNode = $getNodeByKey(nodeKey);
+    } catch {
+        return null;
     }
-    return null;
+    if (!targetNode || !(targetNode instanceof ThesisParagraphNode)) return null;
+    return targetNode;
 }
 
 function _normalizePlainText(text) {
@@ -248,25 +259,12 @@ function $findNodeByOldText(oldText) {
 }
 
 function $findEditableNode(diff) {
-    return (
-        $findNodeByKey(diff.target_key) ||
-        $findNodeByParaId(diff.paraId) ||
-        $findNodeByOldText(diff.old_text || diff.before)
-    );
-}
-
-/**
- * Get HTML content from a node preserving formatting (used to capture "before" state).
- */
-function _getNodeHtmlContent(editor, node) {
-    if (!node) return '';
-    // Use exportDOM to get the raw HTML element, then extract its innerHTML
-    const { element } = node.exportDOM(editor);
-    if (element) {
-        return element.innerHTML;
+    if (diff.target_key) {
+        const targetNode = $findNodeByKey(diff.target_key);
+        if (targetNode && targetNode.isAttached()) return targetNode;
+        console.warn('[DiffBridge] target_key not found, using text-match fallback');
     }
-    // Fallback if exportDOM fails
-    return node.getTextContent() || '';
+    return $findNodeByParaId(diff.paraId) || $findNodeByOldText(diff.old_text || diff.before);
 }
 
 /**
@@ -301,10 +299,11 @@ function _injectContentIntoNode(editor, node, htmlContent) {
         for (const n of nodes) {
             // Unwrap paragraph-level nodes — append their children directly
             if (n.getType && (n.getType() === 'paragraph' || n.getType() === 'thesis-paragraph')) {
-                const innerChildren = n.getChildren();
+                const innerChildren = [...n.getChildren()]; // snapshot before moving
                 for (const child of innerChildren) {
                     node.append(child);
                 }
+                n.remove(); // remove orphan wrapper so it doesn't linger in the node map
             } else {
                 node.append(n);
             }

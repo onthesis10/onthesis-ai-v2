@@ -209,6 +209,31 @@ const LexicalEditor = forwardRef(({
 
     const [isGhostWriting, setIsGhostWriting] = useState(false);
 
+    const handleContextMenu = (e) => {
+        const selection = window.getSelection();
+        const selectedText = selection?.toString()?.trim();
+
+        if (selectedText) {
+            e.preventDefault();
+            let targetKey = '';
+            if (ref && ref.current && ref.current.getActiveNodeContext) {
+                const ctx = ref.current.getActiveNodeContext();
+                if (ctx && ctx.target_key) {
+                    targetKey = ctx.target_key;
+                }
+            }
+
+            window.dispatchEvent(new CustomEvent('onthesis-editor-context-menu', {
+                detail: {
+                    x: e.clientX,
+                    y: e.clientY,
+                    selectedText,
+                    targetKey
+                }
+            }));
+        }
+    };
+
     // 1. REGISTER NODES
     const nodes = [
         ThesisParagraphNode,
@@ -249,7 +274,10 @@ const LexicalEditor = forwardRef(({
                 )}
 
                 {/* --- B. EDITOR CANVAS (CONTINUOUS VIEW) --- */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar relative px-12 py-10 bg-white dark:bg-[#1E1E1E]">
+                <div 
+                    className="flex-1 overflow-y-auto custom-scrollbar relative px-12 py-10 bg-white dark:bg-[#1E1E1E]"
+                    onContextMenu={handleContextMenu}
+                >
                     <div className="min-h-full pb-32 max-w-4xl mx-auto">
                         <RichTextPlugin
                             contentEditable={

@@ -761,7 +761,18 @@ class SupervisorAgent:
         
         # 3. Intent Classification
         histori = agent_context.get("conversation_history", [])
-        intent_res = self.classifier.classify(message, histori)
+        allowed_requested_intents = {"rewrite_paragraph", "paraphrase", "expand_paragraph"}
+        requested_intent = str((context or {}).get("requested_intent") or "").strip()
+        if requested_intent in allowed_requested_intents and (context or {}).get("source") == "context_menu":
+            intent_res = {
+                "intent": requested_intent,
+                "confidence": 1.0,
+                "key_entities": [],
+                "needs_clarification": False,
+            }
+            logger.info(f"Classified intent: {requested_intent} (confidence: 1.0, source: context_menu)")
+        else:
+            intent_res = self.classifier.classify(message, histori)
         intent = intent_res.get("intent", "unclear")
 
         # Only use fallback keyword matching if the intent is unclear
@@ -802,7 +813,8 @@ class SupervisorAgent:
             self._emit(on_event, "STEP", {"step": "planning", "message": "Menyusun rencana editing..."})
             try:
                 executor = PlanExecutor(agents=self.registry.get_all_agents(), memory=memory, on_event=on_event)
-                plan = self.planner.generate_plan(intent, message, agent_context)
+                selected_text = str((context or {}).get("selected_text") or "").strip()
+                plan = self.planner.generate_plan(intent, selected_text or message, agent_context)
                 if plan.steps:
                     self._emit(on_event, "STEP", {"step": "executing", "message": "Menjalankan rencana editing..."})
                     raw_output = executor.execute(plan)
@@ -822,9 +834,13 @@ class SupervisorAgent:
         # 4. Filter obrolan general bypass (Opsional, Planner menyediakan fallback logic)
         # Akan dihandle planner kalau general question masuk plan generator
         
+        editor_text_intents = {"rewrite_paragraph", "paraphrase", "expand_paragraph", "academic_style", "edit_thesis"}
+        selected_text = str((context or {}).get("selected_text") or "").strip()
+        planner_input = selected_text if intent in editor_text_intents and selected_text else message
+
         # 5. Generate Plan
         try:
-            plan = self.planner.generate_plan(intent, message, agent_context)
+            plan = self.planner.generate_plan(intent, planner_input, agent_context)
             logger.info(f"Plan generated dengan {len(plan.steps)} langkah.")
             if not plan.steps:
                 raise ValueError("Plan generate kosong")

@@ -354,8 +354,33 @@ def run_agent_sse():
     # Gap 11: Use authenticated user ID for user-scoped memory
     user_id = current_user.id
 
-    task = data.get("task", "")
-    context = data.get("context", {})
+    task = data.get("user_message") or data.get("task", "")
+    context = dict(data.get("context", {}) or {})
+    selected_text = (
+        context.get("selected_text")
+        or context.get("selectedText")
+        or data.get("selected_text")
+        or data.get("selectedText")
+        or ""
+    )
+    target_paragraph_key = (
+        context.get("target_paragraph_key")
+        or context.get("target_key")
+        or context.get("targetKey")
+        or data.get("target_paragraph_key")
+        or data.get("targetKey")
+        or ""
+    )
+    if selected_text:
+        context["selected_text"] = selected_text
+    if target_paragraph_key:
+        context["target_paragraph_key"] = target_paragraph_key
+        context["target_key"] = target_paragraph_key
+    source = data.get("source") or context.get("source") or "chat"
+    requested_intent = data.get("intent") or context.get("intent") or ""
+    context["source"] = source
+    if requested_intent and requested_intent != "general":
+        context["requested_intent"] = requested_intent
     project_id = data.get("projectId", "")
     chapter_id = data.get("chapterId", "")
     messages_history = data.get("messages", [])
@@ -448,9 +473,12 @@ def run_agent_sse():
                 if event.get("type") == "TOOL_RESULT":
                     result = event.get("result")
                     if isinstance(result, dict) and result.get("diff"):
+                        diff_payload = _normalize_diff_payload(result["diff"])
                         yield emit({
-                            "type": "PENDING_DIFF",
-                            "diff": _normalize_diff_payload(result["diff"]),
+                            "type": "paragraph_proposed",
+                            "diff": diff_payload,
+                            "old_text": diff_payload.get("old_text", ""),
+                            "new_text": diff_payload.get("new_text", "")
                         })
                     if isinstance(result, dict):
                         for citation_flag in result.get("citation_flags", []):

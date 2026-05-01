@@ -830,6 +830,10 @@ export default function AgentPanel({ editorRef, projectId, activeChapterId, onPe
             const options = {
                 model: detail.model || selectedModel,
                 mode: detail.mode || selectedMode,
+                selectedText: detail.selectedText,
+                targetKey: detail.targetKey,
+                source: detail.source,
+                intent: detail.intent
             };
             startAgentRun(task, context, messages, options, true);
         };
