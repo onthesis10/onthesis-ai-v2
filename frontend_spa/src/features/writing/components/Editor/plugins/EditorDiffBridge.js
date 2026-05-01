@@ -26,11 +26,36 @@ import { ThesisParagraphNode, $createThesisParagraphNode } from '../nodes/Thesis
 import { $createDiffBlockNode, $isDiffBlockNode, $findDiffBlockByDiffId } from '../nodes/DiffBlockNode.jsx';
 
 // ─────────────────────────────────────────────
+// Internal: Capture HTML from a node BEFORE mutation.
+// Must be called OUTSIDE editor.update() — uses editor.read().
+// ─────────────────────────────────────────────
+function _captureNodeHtml(editor, diff) {
+    let html = '';
+    try {
+        editor.read(() => {
+            const node = $findEditableNode(diff);
+            if (!node) return;
+            html = $generateHtmlFromNodes(editor, node);
+        });
+    } catch (e) {
+        console.warn('[DiffBridge] Could not capture node HTML:', e);
+    }
+    return html;
+}
+
+// ─────────────────────────────────────────────
 // 1. Apply Diff Highlight → INSERT DiffBlockNode
 //    Replaces the target paragraph with an inline diff view
 // ─────────────────────────────────────────────
 export function applyDiffHighlight(editor, diff) {
     if (!editor) return;
+
+    // Capture old HTML BEFORE editor.update() to avoid calling exportDOM / $
+    // functions inside an active mutation context, which triggers Error #19.
+    const oldHtml = diff.old_text || diff.before ||
+        ((diff.type === 'edit' || diff.type === 'delete')
+            ? _captureNodeHtml(editor, diff)
+            : '');
 
     editor.update(() => {
         if (diff.type === 'edit') {
@@ -40,10 +65,6 @@ export function applyDiffHighlight(editor, diff) {
                 return;
             }
 
-            // Capture original HTML from the node preserving formats
-            const oldHtml = diff.old_text || diff.before || _getNodeHtmlContent(editor, node);
-
-            // Create DiffBlockNode that shows old vs new
             const diffNode = $createDiffBlockNode(
                 diff.diffId,
                 'edit',
@@ -53,7 +74,6 @@ export function applyDiffHighlight(editor, diff) {
                 diff.reason || '',
             );
 
-            // Replace the original paragraph with the diff block
             node.replace(diffNode);
 
         } else if (diff.type === 'insert') {
@@ -63,17 +83,15 @@ export function applyDiffHighlight(editor, diff) {
                 return;
             }
 
-            // Create DiffBlockNode showing the proposed new content
             const diffNode = $createDiffBlockNode(
                 diff.diffId,
                 'insert',
-                '', // no old content for insert
+                '',
                 diff.new_text || diff.after || '',
                 diff.paraId,
                 diff.reason || '',
             );
 
-            // Insert diff block after/before the anchor
             if (diff.position === 'before') {
                 anchor.insertBefore(diffNode);
             } else {
@@ -84,9 +102,6 @@ export function applyDiffHighlight(editor, diff) {
             const node = $findEditableNode(diff);
             if (!node || !node.isAttached()) return;
 
-            const oldHtml = diff.old_text || diff.before || _getNodeHtmlContent(editor, node);
-
-            // Create DiffBlockNode showing what will be deleted
             const diffNode = $createDiffBlockNode(
                 diff.diffId,
                 'delete',
@@ -96,7 +111,6 @@ export function applyDiffHighlight(editor, diff) {
                 diff.reason || '',
             );
 
-            // Replace paragraph with diff block
             node.replace(diffNode);
         }
     });
@@ -254,20 +268,6 @@ function $findEditableNode(diff) {
 }
 
 /**
- * Get HTML content from a node preserving formatting (used to capture "before" state).
- */
-function _getNodeHtmlContent(editor, node) {
-    if (!node) return '';
-    // Use exportDOM to get the raw HTML element, then extract its innerHTML
-    const { element } = node.exportDOM(editor);
-    if (element) {
-        return element.innerHTML;
-    }
-    // Fallback if exportDOM fails
-    return node.getTextContent() || '';
-}
-
-/**
  * Replace all content inside a node with new HTML content.
  * Must be called inside editor.update() context.
  */
@@ -299,10 +299,11 @@ function _injectContentIntoNode(editor, node, htmlContent) {
         for (const n of nodes) {
             // Unwrap paragraph-level nodes — append their children directly
             if (n.getType && (n.getType() === 'paragraph' || n.getType() === 'thesis-paragraph')) {
-                const innerChildren = n.getChildren();
+                const innerChildren = [...n.getChildren()]; // snapshot before moving
                 for (const child of innerChildren) {
                     node.append(child);
                 }
+                n.remove(); // remove orphan wrapper so it doesn't linger in the node map
             } else {
                 node.append(n);
             }
